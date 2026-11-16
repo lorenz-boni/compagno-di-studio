@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Compagno di studio</title>
+  <meta name="description" content="Un compagno di corso vocale che ti ascolta ripetere e ti corregge, partendo dai tuoi appunti Obsidian.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>🎓 Compagno di studio</h1>
+    <nav class="modes" role="tablist" aria-label="Modalità">
+      <button role="tab" data-mode="racconto" aria-selected="true">Te lo racconto</button>
+      <button role="tab" data-mode="interrogami" aria-selected="false">Interrogami</button>
+      <button role="tab" data-mode="libera" aria-selected="false">Chiacchiera</button>
+    </nav>
+    <button id="btn-settings" class="ghost" title="Impostazioni">⚙️ Impostazioni</button>
+  </header>
+
+  <div class="layout">
+    <aside class="notes">
+      <h2>Appunti</h2>
+      <div class="note-actions">
+        <button id="btn-vault">📁 Apri vault Obsidian</button>
+        <button id="btn-vault-reopen" class="ghost" hidden>↻ Riapri ultimo vault</button>
+        <label class="button ghost">📄 Carica .md<input id="file-input" type="file" accept=".md,.markdown,.txt" multiple hidden></label>
+        <button id="btn-paste" class="ghost">📋 Incolla testo</button>
+      </div>
+      <input id="note-search" type="search" placeholder="Cerca una nota…" hidden>
+      <ul id="note-list" class="note-list"></ul>
+      <div id="current-note" class="current-note" hidden>
+        <div class="current-head">
+          <strong id="current-title"></strong>
+          <button id="btn-clear-note" class="ghost small" title="Togli la nota">✕</button>
+        </div>
+        <details>
+          <summary>Mostra contenuto</summary>
+          <pre id="current-text"></pre>
+        </details>
+      </div>
+      <p class="hint" id="notes-hint">Scegli una nota da ripassare. Senza nota il compagno usa la sua conoscenza generale.</p>
+    </aside>
+
+    <main class="chat">
+      <div id="mode-help" class="mode-help"></div>
+      <ol id="log" class="log" aria-live="polite"></ol>
+      <div id="live" class="bubble user live" hidden></div>
+
+      <div class="status" id="status">Pronto.</div>
+
+      <div class="controls">
+        <button id="btn-mic" class="mic" aria-pressed="false">🎙️ Inizia a parlare</button>
+        <button id="btn-done">✅ Ho finito</button>
+        <button id="btn-stop-voice" class="ghost" title="Zittisci il compagno">🔇 Silenzio</button>
+        <button id="btn-summary" class="ghost">📝 Facciamo il punto</button>
+        <button id="btn-reset" class="ghost">🗑️ Nuova sessione</button>
+      </div>
+
+      <form id="text-form" class="text-form">
+        <textarea id="text-input" rows="2" placeholder="Scrivi qui, oppure detta con Wispr Flow (premi la sua scorciatoia con il cursore in questa casella). Invio per mandare, Maiusc+Invio per andare a capo."></textarea>
+        <button type="submit">Invia</button>
+      </form>
+    </main>
+  </div>
+
+  <!-- Impostazioni -->
+  <dialog id="dlg-settings">
+    <form method="dialog" class="dialog">
+      <h2>Impostazioni</h2>
+      <label>Chiave API Gemini (gratuita)
+        <input id="set-key" type="password" autocomplete="off" placeholder="AIza…">
+      </label>
+      <p class="hint">Creala gratis su <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Resta solo in questo browser.</p>
+
+      <label>Modello
+        <span class="row">
+          <input id="set-model" list="model-list" placeholder="gemini-flash-latest">
+          <button type="button" id="btn-load-models" class="ghost small">Carica elenco</button>
+        </span>
+        <datalist id="model-list"></datalist>
+      </label>
+      <label class="check"><input id="set-fast" type="checkbox"> Risposte rapide (disattiva il "ragionamento" del modello)</label>
+
+      <fieldset>
+        <legend>In "Te lo racconto", correggimi…</legend>
+        <label class="check"><input type="radio" name="correction" value="subito"> subito, a ogni pausa</label>
+        <label class="check"><input type="radio" name="correction" value="fine"> alla fine, quando premo "Ho finito"</label>
+      </fieldset>
+
+      <label>Pausa che conta come "ho finito la frase": <output id="out-pause"></output> s
+        <input id="set-pause" type="range" min="1" max="6" step="0.5">
+      </label>
+
+      <label>Voce
+        <select id="set-voice"></select>
+      </label>
+      <label>Velocità voce: <output id="out-rate"></output>
+        <input id="set-rate" type="range" min="0.7" max="1.6" step="0.05">
+      </label>
+      <label class="check"><input id="set-mute" type="checkbox"> Solo testo (non leggere le risposte)</label>
+
+      <label class="check"><input id="set-autosend" type="checkbox"> Invia da solo il testo dettato con Wispr Flow</label>
+
+      <div class="dialog-actions">
+        <button type="button" id="btn-test-voice" class="ghost">🔊 Prova voce</button>
+        <button value="ok">Salva</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Incolla appunti -->
+  <dialog id="dlg-paste">
+    <form method="dialog" class="dialog">
+      <h2>Incolla gli appunti</h2>
+      <label>Titolo <input id="paste-title" placeholder="es. Termodinamica – secondo principio"></label>
+      <textarea id="paste-text" rows="12" placeholder="Incolla qui il testo…"></textarea>
+      <div class="dialog-actions">
+        <button value="cancel" class="ghost">Annulla</button>
+        <button value="ok">Usa questi appunti</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Resoconto -->
+  <dialog id="dlg-summary">
+    <form method="dialog" class="dialog wide">
+      <h2>Facciamo il punto</h2>
+      <p class="hint">Puoi modificare il testo prima di salvarlo.</p>
+      <textarea id="summary-text" rows="16"></textarea>
+      <p class="hint" id="summary-target"></p>
+      <div class="dialog-actions">
+        <button value="cancel" class="ghost">Chiudi</button>
+        <button type="button" id="btn-copy-summary" class="ghost">📋 Copia</button>
+        <button type="button" id="btn-save-summary">💾 Aggiungi alla nota</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
