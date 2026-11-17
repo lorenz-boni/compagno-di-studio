@@ -1,8 +1,8 @@
-import { streamChat, complete, listModels, benchmark, FALLBACK_MODELS } from './gemini.js?v=202611171114';
-import { Listener, speechSupported } from './speech.js?v=202611171114';
-import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171114';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171114';
-import { buildSystem, FINISHED_PREFIX, START_QUIZ, summaryRequest, VAULT_TOOLS } from './prompts.js?v=202611171114';
+import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171119';
+import { Listener, speechSupported } from './speech.js?v=202611171119';
+import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171119';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171119';
+import { buildSystem, FINISHED_PREFIX, START_QUIZ, summaryRequest, VAULT_TOOLS } from './prompts.js?v=202611171119';
 
 const $ = (s) => document.querySelector(s);
 
@@ -14,6 +14,7 @@ const DEFAULTS = {
   correction: 'subito',
   pause: 2.5,
   voice: '',
+  fallbacks: [], // modelli di riserva misurati con «Prova velocità modelli», dal più veloce
   rate: 1.05,
   mute: false,
   autosend: true,
@@ -58,6 +59,7 @@ function applyVoiceSettings() {
   speaker.muted = settings.mute;
 }
 applyVoiceSettings();
+setFallbackModels(settings.fallbacks);
 
 const listener = new Listener({
   onInterim: (t) => {
@@ -691,16 +693,31 @@ function init() {
     btn.textContent = '⏱️ Sto misurando…';
     out.replaceChildren();
     const current = $('#set-model').value.trim() || DEFAULTS.model;
-    const models = [...new Set([current, 'gemini-flash-latest', ...FALLBACK_MODELS])];
     let rows = [];
     try {
+    // Chiediamo a Google quali modelli esistono davvero per questa chiave.
+    const all = await listAllModels(key);
+    const live = liveCandidates(all);
+    const models = [...new Set([current, ...chatCandidates(all)])].slice(0, 10);
+    const info = document.createElement('li');
+    info.className = 'hint';
+    info.textContent = `La tua chiave vede ${all.length} modelli. Ne provo ${models.length} adatti alla conversazione…`;
+    out.append(info);
     rows = await benchmark(key, models, (r) => {
       const li = document.createElement('li');
       const ok = r.status === 'ok';
-      li.innerHTML = `<button type="button" class="ghost small" ${ok ? '' : 'disabled'}>Usa</button> <strong>${escapeHtml(r.model)}</strong>: ${ok ? `${(r.ms / 1000).toFixed(1)} s` : escapeHtml(String(r.status))}`;
+      li.innerHTML = `<button type="button" class="ghost small" ${ok ? '' : 'disabled'}>Usa</button> <strong>${escapeHtml(r.model)}</strong>: ${ok ? `${(r.ms / 1000).toFixed(1)} s` : escapeHtml(String(r.status))}${r.detail ? `<br><span class="hint">${escapeHtml(r.detail)}</span>` : ''}`;
       li.querySelector('button').onclick = () => { $('#set-model').value = r.model; };
       out.append(li);
     });
+    const liveLi = document.createElement('li');
+    liveLi.className = 'hint';
+    liveLi.textContent = live.length ? `Modelli Gemini Live (voce in tempo reale) disponibili: ${live.join(', ')}` : 'Nessun modello Gemini Live disponibile per questa chiave.';
+    out.append(liveLi);
+    const fast = rows.filter((r) => r.status === 'ok').sort((a, b) => a.ms - b.ms).map((r) => r.model);
+    settings.fallbacks = fast;
+    saveSettings();
+    setFallbackModels(fast);
     } catch (err) {
       const li = document.createElement('li');
       li.textContent = `Errore durante la prova: ${err.message}`;

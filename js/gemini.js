@@ -32,6 +32,37 @@ async function toError(res) {
   return new GeminiError(`Errore Gemini ${res.status}: ${detail || res.statusText}`, res.status);
 }
 
+/** Tutti i modelli visibili con la chiave: [{ id, methods, displayName }]. */
+export async function listAllModels(key) {
+  const out = [];
+  let pageToken = '';
+  do {
+    const res = await fetch(`${BASE}/models?pageSize=200${pageToken ? `&pageToken=${pageToken}` : ''}`, { headers: { 'x-goog-api-key': key } });
+    if (!res.ok) throw await toError(res);
+    const j = await res.json();
+    for (const m of j.models || []) {
+      out.push({ id: m.name.replace(/^models\//, ''), methods: m.supportedGenerationMethods || [], displayName: m.displayName || '' });
+    }
+    pageToken = j.nextPageToken || '';
+  } while (pageToken);
+  return out;
+}
+
+/** Modelli adatti a una conversazione veloce: testuali, Gemini, possibilmente Flash/Lite. */
+export function chatCandidates(all) {
+  return all
+    .filter((m) => m.methods.includes('generateContent') && m.id.includes('gemini'))
+    .map((m) => m.id)
+    .filter((id) => !/(image|tts|embedding|live|audio|vision|robotics|computer-use|exp-)/.test(id))
+    .filter((id) => /flash|lite/.test(id))
+    .sort((a, b) => b.localeCompare(a, 'en', { numeric: true })); // i più recenti per primi
+}
+
+/** Modelli che supportano la conversazione vocale in tempo reale (Gemini Live). */
+export function liveCandidates(all) {
+  return all.filter((m) => m.methods.includes('bidiGenerateContent')).map((m) => m.id);
+}
+
 /** Elenca i modelli testuali Gemini utilizzabili con la chiave. */
 export async function listModels(key) {
   const res = await fetch(`${BASE}/models?pageSize=200`, { headers: { 'x-goog-api-key': key } });
@@ -64,6 +95,11 @@ const thinkingChoice = new Map();
  * se il modello non lo supporta si riprova senza.
  */
 export const FALLBACK_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+// Elenco di riserva effettivo: quello misurato con la chiave dell'utente, se c'è.
+let fallbackModels = FALLBACK_MODELS;
+export function setFallbackModels(list) {
+  if (Array.isArray(list) && list.length) fallbackModels = list;
+}
 
 const sleep = (ms, signal) => new Promise((resolve, reject) => {
   if (signal?.aborted) { reject(new DOMException('Interrotto', 'AbortError')); return; }
@@ -94,7 +130,7 @@ const PENALTY_MS = 5 * 60 * 1000;
 export const FIRST_CHUNK_TIMEOUT = 10000;
 
 function orderModels(model) {
-  const all = [model, ...FALLBACK_MODELS.filter((m) => m !== model)];
+  const all = [model, ...fallbackModels.filter((m) => m !== model)];
   const now = Date.now();
   const ok = all.filter((m) => !(penalty.get(m) > now));
   const bad = all.filter((m) => penalty.get(m) > now);
@@ -236,8 +272,12 @@ export async function benchmark(key, models, onResult) {
         const c = r.first.done ? null : toChunk(r.first.value);
         row = { model, ms, status: 'ok', text: c?.text || '' };
         for await (const _ of r.events) { /* svuota */ }
+      } else if (r.status === 'timeout') {
+        row = { model, ms, status: 'oltre 30 s' };
       } else {
-        row = { model, ms, status: r.status === 'timeout' ? 'oltre 30 s' : `errore ${r.status}` };
+        let detail = '';
+        try { detail = (await r.res.json())?.error?.message || ''; } catch { /* corpo non JSON */ }
+        row = { model, ms, status: `errore ${r.status}`, detail: detail.slice(0, 160) };
       }
     } catch (err) {
       row = { model, ms: Math.round(performance.now() - t0), status: err.name === 'AbortError' ? 'oltre 30 s' : err.message };
