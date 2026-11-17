@@ -167,6 +167,7 @@ async function respond() {
         contents: history,
         tools: vault.root ? VAULT_TOOLS : undefined,
         signal: ctrl.signal,
+        onNotice: (msg) => { addBubble('info', `⏳ ${msg}`); $('#log').append(bubble); },
       });
       for await (const chunk of stream) {
         clearTimeout(timer);
