@@ -41,7 +41,7 @@ const serve = require('./_server.cjs');
   await page.screenshot({ path: `${shots}/ui-processing.png` });
   await page.waitForSelector('.bubble.bot >> text=Giusto');
   await page.waitForTimeout(200);
-  ok(await core() === 'paused', `conversazione ferma: paused (${await core()})`);
+  ok(await core() === 'idle', `conversazione ferma: in attesa (${await core()})`);
   ok((await page.textContent('#ctx-turns')) === '1', 'pannello contesto: 1 intervento');
 
   mode = 'fail';
@@ -50,6 +50,30 @@ const serve = require('./_server.cjs');
   await page.waitForSelector('.bubble.error', { timeout: 10000 });
   ok(await core() === 'error', `errore: error (${await core()})`);
   await page.screenshot({ path: `${shots}/ui-error.png` });
+
+  // Pausa / Riprendi
+  await page.click('#btn-mic');
+  await page.click('#btn-pause');
+  ok(await core() === 'paused' && (await page.textContent('#btn-pause .lbl')) === 'Riprendi', `pausa: nucleo in pausa e pulsante «Riprendi» (${await core()})`);
+  ok((await page.textContent('#btn-mic .lbl')) === 'Microfono classico', 'in pausa il microfono smette di ascoltare');
+  ok((await page.textContent('#status')).includes('In pausa'), 'stato: in pausa');
+  await page.click('#btn-pause');
+  ok(await core() === 'listening' && (await page.textContent('#btn-pause .lbl')) === 'Pausa', `ripresa: torna ad ascoltare (${await core()})`);
+  await page.click('#btn-mic');
+  await page.click('#btn-pause');
+  await page.fill('#text-input', 'una domanda nuova');
+  await page.press('#text-input', 'Enter');
+  ok((await page.textContent('#btn-pause .lbl')) === 'Pausa', 'scrivere una domanda nuova fa uscire dalla pausa');
+  await page.waitForTimeout(1500);
+
+  // Velocità di parola
+  await page.click('#btn-settings');
+  await page.fill('#set-rate', '0.8');
+  await page.dispatchEvent('#set-rate', 'input');
+  ok((await page.textContent('#out-rate')) === 'molto lenta', `velocità: ${await page.textContent('#out-rate')}`);
+  await page.click('#dlg-settings button[value=ok]');
+  await page.waitForTimeout(300);
+  ok(await page.evaluate(() => JSON.parse(localStorage.getItem('compagno.settings')).rate) === 0.8, 'velocità salvata');
 
   // Pannelli e full immersion
   await page.click('#btn-toggle-library');

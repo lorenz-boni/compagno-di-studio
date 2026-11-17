@@ -74,7 +74,7 @@ export class LiveSession {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
     });
     this.inCtx = new AudioContext({ sampleRate: 16000 });
-    await this.inCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611171533', import.meta.url));
+    await this.inCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611171555', import.meta.url));
     const src = this.inCtx.createMediaStreamSource(this.stream);
     this.node = new AudioWorkletNode(this.inCtx, 'pcm-capture');
     this.node.port.onmessage = (e) => this.#sendAudio(e.data);
@@ -186,7 +186,7 @@ export class LiveSession {
   }
 
   #sendAudio(buffer) {
-    if (!this.ready) return;
+    if (!this.ready || this.paused) return; // in pausa JARVIS non ti ascolta
     this.#send({ realtimeInput: { audio: { data: toBase64(buffer), mimeType: 'audio/pcm;rate=16000' } } });
   }
 
@@ -225,6 +225,22 @@ export class LiveSession {
     this.o.onSpeaking?.(false);
   }
 
+  /** Pausa: la voce si ferma a metà (l'audio in arrivo resta in attesa) e il microfono non viene inviato. */
+  pause() {
+    this.paused = true;
+    this.outCtx?.suspend().catch(() => {});
+  }
+
+  resume() {
+    this.paused = false;
+    this.outCtx?.resume().catch(() => {});
+  }
+
+  /** Aggiunge un'informazione al contesto senza chiedere una risposta (es. «da ora parla più piano»). */
+  addContext(text) {
+    this.#send({ clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: false } });
+  }
+
   /** Volume attuale (0..1) di microfono e voce del modello, per le animazioni. */
   levels() {
     const rms = (an) => {
@@ -241,6 +257,7 @@ export class LiveSession {
   /** Zittisce la risposta in corso (senza chiudere la chiamata). */
   silence() {
     this.#stopPlayback();
+    if (this.paused) this.resume();
   }
 
   stop() {

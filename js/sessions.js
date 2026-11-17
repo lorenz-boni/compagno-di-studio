@@ -1,6 +1,6 @@
 // Conversazioni salvate: nel browser (IndexedDB) e, se il vault è collegato,
 // anche come copia di sicurezza in `.compagno/sessioni/` dentro il vault.
-import { dbGetAll, dbPut, dbDelete } from './db.js?v=202611171533';
+import { dbGetAll, dbPut, dbDelete } from './db.js?v=202611171555';
 
 const DIR = ['.compagno', 'sessioni'];
 

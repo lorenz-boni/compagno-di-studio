@@ -1,17 +1,17 @@
-import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171533';
-import { Listener, speechSupported } from './speech.js?v=202611171533';
-import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171533';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, readNoteFull, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171533';
-import { buildSystem, TONES, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171533';
+import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171555';
+import { Listener, speechSupported } from './speech.js?v=202611171555';
+import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171555';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, readNoteFull, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171555';
+import { buildSystem, TONES, rateLabel, speedInstruction, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171555';
 
-import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171533';
-import { LiveSession, pickLiveModels, LIVE_VOICES, previewVoice, playChunks, DEFAULT_LIVE_VOICE, SAFE_LIVE_VOICE, CLASSIC_VOICES } from './live.js?v=202611171533';
-import { mountVoicePicker } from './voicepicker.js?v=202611171533';
-import { createOnboarding } from './onboarding.js?v=202611171533';
-import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611171533';
-import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611171533';
-import { stripExt, isMarkdown, kindOf, extractText, fileToBase64, OCR_PROMPT, ACCEPT } from './docs.js?v=202611171533';
-import { dbGet, dbPut } from './db.js?v=202611171533';
+import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171555';
+import { LiveSession, pickLiveModels, LIVE_VOICES, previewVoice, playChunks, DEFAULT_LIVE_VOICE, SAFE_LIVE_VOICE, CLASSIC_VOICES } from './live.js?v=202611171555';
+import { mountVoicePicker } from './voicepicker.js?v=202611171555';
+import { createOnboarding } from './onboarding.js?v=202611171555';
+import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611171555';
+import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611171555';
+import { stripExt, isMarkdown, kindOf, extractText, fileToBase64, OCR_PROMPT, ACCEPT } from './docs.js?v=202611171555';
+import { dbGet, dbPut } from './db.js?v=202611171555';
 
 const $ = (s) => document.querySelector(s);
 
@@ -70,6 +70,8 @@ let liveBotBubble = null;
 let liveUserStopped = false;
 let liveModelName = '';
 let lastErrorAt = 0;
+let paused = false; // pausa: JARVIS non parla e non ascolta finché non riprendi
+let pausedListening = false; // il microfono classico era acceso quando hai messo in pausa
 let activityStart = 0; // inizio della sessione di studio corrente (per la durata nel pannello)
 const micMeter = new MicMeter();
 // Progressi di studio (annotatore in background)
@@ -153,6 +155,44 @@ function flush({ finished = false } = {}) {
   return true;
 }
 
+// ---------- Pausa ----------
+function updatePauseUi() {
+  const b = $('#btn-pause');
+  b.setAttribute('aria-pressed', String(paused));
+  b.querySelector('.lbl').textContent = paused ? 'Riprendi' : 'Pausa';
+  b.querySelector('use').setAttribute('href', paused ? '#i-play' : '#i-pause');
+  b.title = paused ? 'Riprendi da dove JARVIS si era fermato' : 'Metti in pausa JARVIS (poi riparte da dove era rimasto)';
+  updateStatus();
+}
+
+function setPaused(on) {
+  if (on === paused) return;
+  paused = on;
+  lastErrorAt = 0; // hai appena fatto qualcosa: il segnale d'errore non serve più
+  if (on) {
+    pausedListening = listener.active;
+    if (listener.active) listener.stop();
+    clearTimeout(silenceTimer);
+    speaker.pause();
+    live?.pause();
+  } else {
+    speaker.resume();
+    live?.resume();
+    if (pausedListening && !live) listener.start();
+    pausedListening = false;
+  }
+  updatePauseUi();
+}
+
+/** Esce dalla pausa senza riprendere ciò che era rimasto in sospeso (es. quando dici o scrivi qualcosa di nuovo). */
+function clearPause() {
+  if (!paused) return;
+  paused = false;
+  pausedListening = false;
+  live?.resume();
+  updatePauseUi();
+}
+
 // ---------- Conversazione ----------
 function addUserTurn(text) {
   const last = history[history.length - 1];
@@ -162,6 +202,8 @@ function addUserTurn(text) {
 
 function sendUser(text, prefix = '', { hidden = false } = {}) {
   if (!activityStart) activityStart = Date.now();
+  clearPause();
+  lastErrorAt = 0;
   if (!settings.key) {
     addBubble('error', 'Manca la chiave API di Gemini: inseriscila nelle impostazioni.');
     openSettings();
@@ -339,6 +381,7 @@ function modelHistory(max = 40) {
 }
 
 async function startNewSession() {
+  clearPause();
   if (live) stopLive();
   if (controller) controller.abort();
   speaker.cancel();
@@ -400,6 +443,7 @@ function updateLiveUi() {
 
 async function startLive() {
   if (!settings.key) { openSettings(); return; }
+  clearPause();
   if (controller) controller.abort();
   speaker.cancel();
   if (listener.active) listener.stop();
@@ -435,7 +479,8 @@ async function connectLive(i, voice = settings.liveVoice) {
     key: settings.key,
     model,
     voice,
-    system: buildSystem({ mode, correction: settings.correction, note, vault: vaultInfo(), memory: studyMemory(), profile: settings.profile, tone: settings.tone }) + LIVE_EXTRA,
+    system: buildSystem({ mode, correction: settings.correction, note, vault: vaultInfo(), memory: studyMemory(), profile: settings.profile, tone: settings.tone }) + LIVE_EXTRA
+      + (speedInstruction(settings.rate) ? `\n\nRITMO: ${speedInstruction(settings.rate)}` : ''),
     tools: vault.root ? VAULT_TOOLS : undefined,
     seed: liveSeed(),
     kickoff,
@@ -490,6 +535,7 @@ async function connectLive(i, voice = settings.liveVoice) {
 }
 
 function stopLive() {
+  clearPause();
   liveUserStopped = true;
   const s = live;
   live = null;
@@ -665,6 +711,7 @@ async function loadSession(id) {
   if (id === session.id) return;
   const s = sessionsCache.find((x) => x.id === id);
   if (!s) return;
+  clearPause();
   if (live) stopLive();
   if (controller) controller.abort();
   speaker.cancel();
@@ -753,6 +800,7 @@ setInterval(() => { if (controller) updateStatus(); }, 1000);
 /** Stato del nucleo, indicatore di connessione e pannello del contesto. */
 function coreStateNow() {
   if (Date.now() - lastErrorAt < 6000) return 'error';
+  if (paused) return 'paused';
   if (live) {
     if (liveState === 'connecting' || liveState === 'reconnecting') return 'processing';
     return liveSpeaking ? 'speaking' : 'listening';
@@ -760,7 +808,6 @@ function coreStateNow() {
   if (controller) return 'processing';
   if (speaker.speaking) return 'speaking';
   if (listener.active) return 'listening';
-  if (history.length) return 'paused';
   return 'idle';
 }
 
@@ -804,6 +851,12 @@ function updateStatus() {
 }
 
 function updateStatusText() {
+  if (paused) {
+    const el = $('#status');
+    el.textContent = 'In pausa: JARVIS non parla e non ti ascolta. Premi «Riprendi» per continuare da dove si era fermato.';
+    el.className = 'status';
+    return;
+  }
   const el = $('#status');
   let text = 'Pronto.';
   let cls = '';
@@ -1112,7 +1165,7 @@ function openSettings() {
   $('#set-pause').value = settings.pause;
   $('#out-pause').textContent = settings.pause;
   $('#set-rate').value = settings.rate;
-  $('#out-rate').textContent = settings.rate;
+  $('#out-rate').textContent = rateLabel(settings.rate);
   $('#set-mute').checked = settings.mute;
   $('#set-autosend').checked = settings.autosend;
   fillVoices();
@@ -1126,7 +1179,11 @@ function readSettingsForm() {
   settings.correction = document.querySelector('input[name="correction"]:checked')?.value || 'subito';
   settings.pause = Number($('#set-pause').value);
   settings.voice = $('#set-voice').value;
+  const oldRate = settings.rate;
   settings.rate = Number($('#set-rate').value);
+  if (live && rateLabel(oldRate) !== rateLabel(settings.rate)) {
+    live.addContext(`[Nota per JARVIS: l'utente ha cambiato la velocità di parola. Da ora: ${speedInstruction(settings.rate) || 'parla a ritmo normale.'}]`);
+  }
   settings.mute = $('#set-mute').checked;
   settings.autosend = $('#set-autosend').checked;
   settings.liveModel = $('#set-live-model').value;
@@ -1309,6 +1366,7 @@ function init() {
   // Microfono
   $('#btn-mic').onclick = async () => {
     if (live) return;
+    if (paused) { setPaused(false); if (listener.active) return; }
     if (listener.active) {
       listener.stop();
       flush();
@@ -1322,7 +1380,8 @@ function init() {
     if (savedVault && !vault.root) await openVault(savedVault, { quiet: true });
     if (!flush({ finished: true })) startQuizIfNeeded();
   };
-  $('#btn-stop-voice').onclick = () => { speaker.cancel(); live?.silence(); };
+  $('#btn-stop-voice').onclick = () => { speaker.cancel(); live?.silence(); clearPause(); };
+  $('#btn-pause').onclick = () => setPaused(!paused);
   $('#btn-reset').onclick = () => startNewSession();
   $('#btn-new-session').onclick = () => startNewSession();
   $('#btn-live').onclick = async () => {
@@ -1343,6 +1402,7 @@ function init() {
     if (!t) return;
     input.value = '';
     if (live) {
+      clearPause();
       commitLiveUser();
       addBubble('user', t);
       addUserTurn(t);
@@ -1414,7 +1474,10 @@ function init() {
   $('#btn-settings').onclick = openSettings;
   $('#dlg-settings').addEventListener('close', readSettingsForm);
   $('#set-pause').oninput = (e) => { $('#out-pause').textContent = e.target.value; };
-  $('#set-rate').oninput = (e) => { $('#out-rate').textContent = e.target.value; };
+  $('#set-rate').oninput = (e) => {
+    $('#out-rate').textContent = rateLabel(e.target.value);
+    speaker.rate = Number(e.target.value); // si sente subito sulla prossima frase
+  };
   $('#btn-test-voice').onclick = () => {
     const prev = { ...settings };
     settings.voice = $('#set-voice').value;

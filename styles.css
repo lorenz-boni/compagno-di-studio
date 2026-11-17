@@ -646,6 +646,10 @@ dialog:has(.wide) { width: min(780px, calc(100vw - 32px)); }
 .scrim { display: none; }
 
 /* ---------- Responsive ---------- */
+@media (max-width: 1560px) {
+  #btn-mic .lbl, #btn-stop-voice .lbl, #btn-reset .lbl { display: none; }
+  #btn-mic, #btn-stop-voice, #btn-reset { padding: 0.7em 0.85em; }
+}
 @media (max-width: 1280px) {
   .modes button span { display: none; }
   .modes button { padding: 0.55em 0.8em; }
@@ -754,3 +758,6 @@ dialog.welcome { width: min(720px, calc(100vw - 32px)); }
   .tone-pick { grid-template-columns: 1fr; }
   .vp-grid { grid-template-columns: 1fr; }
 }
+.range-ends { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--muted); margin-top: -0.2rem; }
+.btn-dock[aria-pressed="true"]#btn-pause { border-color: var(--orange); color: var(--orange); box-shadow: 0 0 0 1px rgb(255 181 71 / 0.3); }
+.btn-dock[aria-pressed="true"]#btn-pause .ic { color: var(--orange); }

@@ -39,6 +39,7 @@ const serve = require('./_server.cjs');
       }
       if (msg.clientContent) {
         log.clientContent.push(msg.clientContent);
+        if (!msg.clientContent.turnComplete) return;
         if (msg.clientContent.turnComplete) {
           send({ serverContent: { outputTranscription: { text: 'Ricevuto il testo scritto.' } } });
           send({ serverContent: { turnComplete: true } });
@@ -64,6 +65,22 @@ const serve = require('./_server.cjs');
   console.log('nota aperta dallo strumento:', await page.textContent('#current-title'), '| testo restituito al modello:', JSON.stringify(log.toolResponses[0].functionResponses[0].response).includes('Bernoulli: p'));
   console.log('chat:', await page.$$eval('#log .bubble', (b) => b.map((x) => `[${x.dataset.kind}] ${x.textContent}`)));
   console.log('stato:', await page.textContent('#status'), '| pulsante:', await page.textContent('#btn-live'), '| microfono normale disattivato:', await page.isDisabled('#btn-mic'));
+  // Pausa durante la chiamata: il microfono non viene inviato, poi riprende
+  await page.click('#btn-pause');
+  const fermo = log.audioChunks;
+  await page.waitForTimeout(700);
+  console.log('in pausa nessun audio inviato:', log.audioChunks === fermo, '| nucleo:', await page.evaluate(() => document.body.dataset.core));
+  await page.click('#btn-pause');
+  await page.waitForTimeout(700);
+  console.log('ripresa: il microfono riparte:', log.audioChunks > fermo);
+  // Velocità cambiata durante la chiamata: JARVIS riceve la nota senza dover rispondere
+  await page.click('#btn-settings');
+  await page.fill('#set-rate', '0.8');
+  await page.click('#dlg-settings button[value=ok]');
+  await page.waitForTimeout(400);
+  const nota = log.clientContent.find((c) => !c.turnComplete && JSON.stringify(c).includes('velocità'));
+  console.log('nota sulla velocità inviata a JARVIS:', Boolean(nota));
+
   // testo scritto durante la chiamata
   await page.fill('#text-input', 'ti scrivo una cosa');
   await page.press('#text-input', 'Enter');

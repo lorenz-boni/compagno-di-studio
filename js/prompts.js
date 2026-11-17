@@ -127,6 +127,27 @@ export function buildSystem({ mode, correction, note, vault, memory, profile, to
 export const FINISHED_PREFIX = '[L\'utente ha finito di raccontare. Ecco tutta la sua esposizione:]\n';
 
 export const START_QUIZ = '[Inizia pure l\'interrogazione con la prima domanda.]';
+/** Etichetta della velocità di parola (stessa scala del cursore nelle impostazioni). */
+export function rateLabel(rate) {
+  const r = Number(rate) || 1;
+  if (r < 0.85) return 'molto lenta';
+  if (r < 0.98) return 'lenta';
+  if (r <= 1.12) return 'normale';
+  if (r <= 1.3) return 'svelta';
+  return 'veloce';
+}
+
+/** Istruzione di ritmo per la voce dal vivo (Gemini Live non ha un comando di velocità: si chiede al modello). */
+export function speedInstruction(rate) {
+  return {
+    'molto lenta': 'Parla MOLTO lentamente e con calma: frasi brevi, pause tra un concetto e l\'altro, scandisci bene ogni termine tecnico.',
+    lenta: 'Parla lentamente e con calma, scandendo bene i termini tecnici, con piccole pause tra le frasi.',
+    normale: '',
+    svelta: 'Parla a un ritmo un po\' più svelto del normale, senza mangiarti le parole.',
+    veloce: 'Parla velocemente, con ritmo sostenuto ma sempre comprensibile.',
+  }[rateLabel(rate)];
+}
+
 export const LIVE_EXTRA = `\n\nSTAI PARLANDO A VOCE IN TEMPO REALE, come in una telefonata. Parla sempre in italiano, con il tono naturale di un compagno di corso. L'utente può interromperti: se lo fa, fermati e ascoltalo. Non pronunciare mai simboli, percorsi di file, estensioni o parentesi: di' solo il nome della lezione. Se apri una nota con gli strumenti, il suo testo ti arriva nella risposta dello strumento (campo "testo"): da quel momento usalo come appunti.`;
 
 export const START_EXPLAIN = '[Inizia a spiegarmi gli appunti dalla prima sezione.]';

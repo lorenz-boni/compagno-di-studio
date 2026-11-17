@@ -71,6 +71,10 @@ Alla prima apertura una **presentazione guidata** chiede:
 
 Ogni passo si può saltare. Tutto si cambia in ⚙️ Impostazioni, da dove si può anche rivedere la presentazione.
 
+**⏸ Pausa / ▶ Riprendi** (barra in basso): JARVIS si ferma a metà e smette di ascoltare, poi riparte da dove era rimasto. Con la voce di Chrome ripete la frase interrotta. Se dici o scrivi qualcosa di nuovo esce da solo dalla pausa. **Silenzio** invece interrompe la risposta in corso.
+
+**Velocità di parola** (⚙️ Impostazioni): da "molto lenta" a "veloce", per entrambe le voci. Con "Parla con JARVIS" la velocità viene chiesta al modello, perché Gemini Live non ha un comando diretto, e vale anche se la cambi durante la chiamata.
+
 La voce naturale è quella di **Parla con JARVIS** (Gemini Live). Il microfono classico usa la voce di Chrome, più meccanica.
 
 ## Condividerla con un amico

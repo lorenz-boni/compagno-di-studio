@@ -58,6 +58,10 @@ export function pickVoice(name) {
   );
 }
 
+/**
+ * Voce di Chrome con una coda di frasi gestita da noi: così si può mettere in pausa e riprendere
+ * (la frase interrotta viene ripetuta dall'inizio: Chrome non riprende in modo affidabile a metà frase).
+ */
 export class Speaker {
   constructor({ onStart, onEnd } = {}) {
     this.onStart = onStart || (() => {});
@@ -65,44 +69,85 @@ export class Speaker {
     this.voiceName = '';
     this.rate = 1.05;
     this.muted = false;
-    this.pending = 0;
+    this.queue = []; // frasi in attesa
+    this.current = null; // { text } frase che sta dicendo
+    this.active = false; // c'è un discorso in corso (anche se in pausa)
+    this.paused = false;
     this.spoken = ''; // testo detto di recente, per riconoscere l'eco nel microfono
   }
 
   get speaking() {
-    return this.pending > 0;
+    return this.active;
   }
 
   say(text) {
     if (!synth || this.muted) return;
     const clean = cleanForSpeech(text);
     if (!clean) return;
-    const u = new SpeechSynthesisUtterance(clean);
+    if (!this.active) {
+      this.active = true;
+      this.spoken = '';
+      this.onStart();
+    }
+    this.spoken += ' ' + clean;
+    this.queue.push(clean);
+    if (!this.current && !this.paused) this.#next();
+  }
+
+  #next() {
+    const text = this.queue.shift();
+    if (text === undefined) {
+      this.current = null;
+      if (this.active) {
+        this.active = false;
+        this.onEnd();
+      }
+      return;
+    }
+    const item = { text };
+    this.current = item;
+    const u = new SpeechSynthesisUtterance(text);
     const voice = pickVoice(this.voiceName);
     if (voice) u.voice = voice;
     u.lang = voice?.lang || 'it-IT';
     u.rate = this.rate;
-    if (this.pending === 0) {
-      this.spoken = '';
-      this.onStart();
-    }
-    this.pending++;
-    this.spoken += ' ' + clean;
     const done = () => {
-      this.pending = Math.max(0, this.pending - 1);
-      if (this.pending === 0) this.onEnd();
+      // fine (o interruzione) di una frase vecchia: la ignoriamo
+      if (this.current !== item || this.paused) return;
+      this.current = null;
+      this.#next();
     };
     u.onend = done;
     u.onerror = done;
     synth.speak(u);
   }
 
+  /** Ferma la voce a metà; `resume()` riparte dalla frase interrotta. */
+  pause() {
+    if (this.paused) return;
+    this.paused = true;
+    if (this.current) {
+      this.queue.unshift(this.current.text);
+      this.current = null;
+    }
+    synth?.cancel();
+  }
+
+  resume() {
+    if (!this.paused) return;
+    this.paused = false;
+    if (!this.current) this.#next();
+  }
+
   cancel() {
-    if (!synth) return;
-    const was = this.pending > 0;
-    this.pending = 0;
-    synth.cancel();
-    if (was) this.onEnd();
+    this.queue = [];
+    this.current = null;
+    this.paused = false;
+    synth?.cancel();
+    if (this.active) {
+      this.active = false;
+      this.onEnd();
+    }
   }
 }
 
