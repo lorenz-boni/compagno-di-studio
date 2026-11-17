@@ -1,0 +1,67 @@
+JARVIS · COMPAGNO DI STUDIO
+===========================
+
+Un assistente vocale per studiare: gli racconti la lezione e lui ti ascolta e ti corregge,
+partendo dai TUOI appunti (PDF, Word, Markdown/Obsidian). Puoi anche farti spiegare gli
+appunti o farti interrogare. È gratis.
+
+
+COSA TI SERVE
+-------------
+- Google Chrome (su Windows o Mac). Edge e Safari hanno problemi con il microfono.
+- Un account Google, per la chiave GRATUITA di Gemini (te la fa creare JARVIS al primo avvio).
+- Meglio delle cuffie con microfono.
+
+
+TRE MODI PER USARLO (scegline uno)
+----------------------------------
+
+1) IL PIÙ SEMPLICE: apri il link
+   https://lorenz-boni.github.io/compagno-di-studio/
+   Si aggiorna sempre da solo. Puoi installarlo come app: icona a destra nella barra
+   degli indirizzi di Chrome → «Installa».
+
+2) UNA COPIA TUA SUL COMPUTER (questa cartella)
+   - Estrai lo ZIP in una cartella che non sposterai più (es. Documenti\JARVIS).
+   - Windows: doppio clic su «Avvia JARVIS (Windows).cmd».
+     Se Windows avvisa «PC protetto da Windows»: «Ulteriori informazioni» → «Esegui comunque».
+     (Se non parte: tasto destro sul file → Proprietà → spunta «Sblocca» → OK.)
+   - Mac: tasto destro su «Avvia JARVIS (Mac).command» → Apri → Apri.
+     Al primo avvio macOS potrebbe proporre di installare gli «Strumenti da riga di comando»: accetta.
+   - Si apre una finestrella nera (lasciala aperta mentre studi) e JARVIS in Chrome,
+     all'indirizzo http://localhost:8777
+   - Funziona solo sul tuo computer; per gli aggiornamenti scarica di nuovo lo ZIP.
+
+3) UNA COPIA ONLINE TUTTA TUA, DA MODIFICARE (serve un account GitHub gratuito)
+   - Vai su https://github.com/lorenz-boni/compagno-di-studio e premi «Fork».
+   - Nel tuo fork: Settings → Pages → «Deploy from a branch» → main / (root) → Save.
+   - Dopo un paio di minuti la tua copia è su https://<tuo-utente>.github.io/compagno-di-studio/
+
+
+PRIMO AVVIO
+-----------
+JARVIS ti presenta 4 passi (ognuno si può saltare e cambiare dopo da ⚙️ Impostazioni):
+  1. come ti chiami e il tuo percorso di studi (università, corso, anno);
+  2. la chiave gratuita di Gemini: https://aistudio.google.com/apikey → «Crea chiave API»
+     (meglio in un progetto nuovo, senza fatturazione) → incollala → «Verifica»;
+  3. il tono (confidenziale, equilibrato, professionale) e la voce (▶ Ascolta per sentirle);
+  4. la cartella dei tuoi appunti: Chrome chiede il permesso, scegli «Consenti a ogni visita».
+
+
+COME SI STUDIA
+--------------
+- Apri una lezione dalla Libreria a sinistra, oppure dillo: «apri Fisica 1, lezione 3».
+- Scegli la modalità in alto: Spiegami · Te lo racconto · Interrogami · Chiacchiera.
+- Premi «Parla con JARVIS» e parla normalmente: ti risponde a voce e puoi interromperlo.
+- «Facciamo il punto» scrive un resoconto; a destra vedi argomento, concetti chiari,
+  da consolidare ed errori. Le conversazioni si salvano da sole (scheda Cronologia).
+- Se Gemini è lento o sovraccarico: ⚙️ Impostazioni → «Prova velocità modelli».
+
+
+PRIVACY
+-------
+- La chiave, le impostazioni e le conversazioni restano nel TUO browser. Non c'è nessun server
+  dell'app: parla direttamente con Google Gemini.
+- I tuoi appunti restano sul tuo computer; a Gemini arriva solo il testo della lezione aperta.
+  Nel piano gratuito Google può usare i testi per migliorare i suoi servizi: non inserire dati sensibili.
+- Non condividere la tua chiave Gemini con nessuno.

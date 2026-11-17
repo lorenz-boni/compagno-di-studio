@@ -73,6 +73,11 @@ Ogni passo si può saltare. Tutto si cambia in ⚙️ Impostazioni, da dove si p
 
 La voce naturale è quella di **Parla con JARVIS** (Gemini Live). Il microfono classico usa la voce di Chrome, più meccanica.
 
+## Condividerla con un amico
+
+- **Il link**: https://lorenz-boni.github.io/compagno-di-studio/. Ognuno usa la sua chiave Gemini e i suoi appunti.
+- **Il pacchetto da scaricare**: https://lorenz-boni.github.io/compagno-di-studio/download/JARVIS-compagno-di-studio.zip. Contiene l'app, la guida `LEGGIMI.txt` e gli avviatori per Windows (`.cmd`, che usa PowerShell già presente in Windows) e Mac (`.command`, che usa python3). L'app gira in locale su `http://localhost:8777`. Si rigenera con `tools/make-zip.sh`.
+
 ## Costi e privacy
 
 - **Gemini**: piano gratuito di Google AI Studio. In caso di errore 429 (quota finita) aspetta un minuto o cambia modello nelle impostazioni. Nel piano gratuito Google può usare i testi per migliorare i suoi servizi: non inserire dati sensibili.
@@ -106,4 +111,5 @@ Poi apri <http://localhost:8000>.
 - `js/ui.js`: interfaccia (pannelli, nucleo animato, onde, indicatore di connessione, contesto).
 - `tests/*.cjs`: prove automatiche con Playwright (Gemini, Gemini Live e microfono simulati). Si lanciano con `node tests/<nome>.cjs .`
 - `PIANO.md`: piano di sviluppo.
+- `share/`: guida e avviatori inclusi nel pacchetto ZIP; `tools/make-zip.sh` lo costruisce in `download/`.
 - `tools/bump-version.sh`: da lanciare prima di ogni commit che cambia l'app. Aggiorna il numero di versione nei link ai file, così Chrome non usa file vecchi dalla cache.
