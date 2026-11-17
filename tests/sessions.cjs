@@ -23,6 +23,7 @@ const serve = require('./_server.cjs');
   await page.fill('#paste-text', 'Bilancio idrologico: P = E + R.');
   await page.click('#dlg-paste button[value=ok]');
   await say('il bilancio è P uguale E più R');
+  await page.click('#tab-history');
   await page.waitForSelector('.session-item');
   // conversazione 2
   await page.click('#btn-new-session');
@@ -40,7 +41,7 @@ const serve = require('./_server.cjs');
   console.log('cronologia inviata dopo la ripresa:', lastBody.contents.map((c) => `${c.role}: ${c.parts.map((p) => p.text).join(' ').slice(0, 40)}`));
   // ricarica: le conversazioni restano
   await page.reload();
-  await page.waitForSelector('.session-item');
+  await page.waitForSelector('#pane-history:not([hidden]) .session-item');
   console.log('dopo ricarica:', await page.$$eval('.s-title', (t) => t.map((x) => x.textContent)));
   await page.screenshot({ path: process.argv[3] || 'sessions.png' });
   console.log('errori pagina:', errors.length ? errors : 'nessuno');
