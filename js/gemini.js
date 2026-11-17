@@ -202,13 +202,19 @@ function toChunk(json) {
  * Risposta in streaming. Se il modello è sovraccarico (503), ha finito la quota (429)
  * o non inizia a rispondere entro 10 s, si passa da soli ai modelli di riserva.
  */
-export async function* streamChat({ key, model, system, contents, tools, fast = true, signal, onNotice, timeoutMs = FIRST_CHUNK_TIMEOUT }) {
+export async function* streamChat({ key, model, system, contents, tools, json, fast = true, signal, onNotice, timeoutMs = FIRST_CHUNK_TIMEOUT }) {
   const body = {
     systemInstruction: { parts: [{ text: system }] },
     contents,
     generationConfig: { temperature: 0.5 },
   };
   if (tools) body.tools = tools;
+  // Risposta strutturata (JSON con schema), usata dall'annotatore dei progressi.
+  if (json) {
+    body.generationConfig.responseMimeType = 'application/json';
+    body.generationConfig.responseSchema = json;
+    body.generationConfig.temperature = 0.2;
+  }
 
   const models = orderModels(model);
   let started = null;

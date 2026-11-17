@@ -265,6 +265,71 @@ export function renderContext(d) {
   setText('ctx-latency', d.latency || '—');
 }
 
+// ---------------------------------------------------------------------------
+// Progressi di studio (dati raccolti dall'annotatore: mai inventati)
+// ---------------------------------------------------------------------------
+function esc(t) {
+  return String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function fillList(id, items, render, onRemove) {
+  const ul = document.getElementById(id);
+  ul.replaceChildren(...items.map((it) => {
+    const li = document.createElement('li');
+    li.innerHTML = render(it);
+    if (onRemove) {
+      const b = document.createElement('button');
+      b.className = 'rm';
+      b.type = 'button';
+      b.title = 'Togli (registrato per errore)';
+      b.setAttribute('aria-label', `Togli «${it.text}»`);
+      b.textContent = '✕';
+      b.onclick = () => onRemove(it);
+      li.append(b);
+    }
+    return li;
+  }));
+  const box = document.getElementById(`${id}-box`);
+  box.hidden = !items.length;
+  const n = document.getElementById(`${id}-n`);
+  if (n) n.textContent = items.length ? String(items.length) : '';
+}
+
+/**
+ * d: { study, prior, busy, enabled, onRemove(kind, item) }
+ * study: { topic, learned[], review[], errors[] }  prior: { review[], errors[] }
+ */
+export function renderStudy(d) {
+  const st = d.study || { learned: [], review: [], errors: [] };
+  const prior = d.prior || { review: [], errors: [] };
+  setText('ctx-topic-text', st.topic || (d.lesson ? 'In attesa del primo scambio' : '—'));
+  fillList('study-review', st.review, (it) => `<span class="t">${esc(it.text)}</span>`, (it) => d.onRemove?.('review', it));
+  fillList('study-errors', st.errors, (it) => `<span class="t">${esc(it.text)}${it.fix ? `<span class="sub">✓ ${esc(it.fix)}</span>` : ''}</span>${it.count > 1 ? `<span class="x">×${it.count}</span>` : ''}`, (it) => d.onRemove?.('errors', it));
+  fillList('study-learned', st.learned, (it) => `<span class="t">${esc(it.text)}</span>`, (it) => d.onRemove?.('learned', it));
+  const priorItems = [
+    ...prior.errors.map((e) => ({ text: e.text, html: `<span class="t">${esc(e.text)}<span class="sub">errore${e.count > 1 ? ` ripetuto ${e.count} volte` : ''}${e.fix ? ` · ✓ ${esc(e.fix)}` : ''}</span></span>` })),
+    ...prior.review.filter((r) => !prior.errors.some((e) => e.text.toLowerCase() === r.text.toLowerCase())).map((r) => ({ text: r.text, html: `<span class="t">${esc(r.text)}<span class="sub">da consolidare</span></span>` })),
+  ];
+  fillList('study-prior', priorItems, (it) => it.html, null);
+
+  const total = st.learned.length + st.review.length;
+  const ring = $('#study-ring');
+  ring.hidden = total < 3;
+  if (total >= 3) {
+    const pct = Math.round((st.learned.length / total) * 100);
+    $('#study-ring-text').textContent = `${pct}%`;
+    $('#study-ring-fg').style.strokeDashoffset = String(97.4 * (1 - pct / 100));
+    ring.title = `${st.learned.length} concetti chiari su ${total} emersi in questa sessione`;
+  }
+  const empty = !st.learned.length && !st.review.length && !st.errors.length && !priorItems.length;
+  $('#study-empty').hidden = !empty;
+  $('#study').dataset.busy = d.busy ? '1' : '0';
+  setText('study-status', !d.enabled ? 'Registrazione disattivata nelle impostazioni.'
+    : d.busy ? 'Aggiorno i progressi…'
+      : d.error ? `Ultimo aggiornamento non riuscito: ${d.error}`
+        : 'Registrati da JARVIS man mano che parlate.');
+}
+
 export function initUi() {
   initChrome();
   wave.init();

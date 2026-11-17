@@ -72,7 +72,12 @@ function vaultSection(vault) {
 Quando l'utente chiede di cercare, aprire o studiare una materia, una lezione o un argomento (es. "apri fluidodinamica 1, lezione 3"), usa SUBITO cerca_note. Se la ricerca trova una sola nota adatta la apre da sola (risposta con "aperta"): in quel caso NON chiamare apri_nota. Altrimenti usa apri_nota sul risultato giusto, senza chiedere conferma se è evidente. Se ci sono più risultati plausibili, leggi i nomi di 2 o 3 opzioni e chiedi quale. I numeri detti a voce corrispondono ai numeri nei nomi dei file ("lezione tre" = "Lezione 03"). Dopo aver aperto una nota, dì in una frase cosa hai aperto e poi: in "Spiegami" inizia subito a spiegare la prima sezione; in "Te lo racconto" invita l'utente a raccontare; in "Interrogami" fai la prima domanda.`;
 }
 
-export function buildSystem({ mode, correction, note, vault }) {
+function memorySection(memory) {
+  if (!memory) return '';
+  return `\n\nMEMORIA DELLO STUDIO SU QUESTI APPUNTI (raccolta automaticamente nelle conversazioni, può essere imprecisa):\n${memory}\nUsala con discrezione: quando è utile torna sui punti deboli e sugli errori già fatti (per esempio con una domanda), senza elencarli tutti e senza ripeterli a ogni risposta.`;
+}
+
+export function buildSystem({ mode, correction, note, vault, memory }) {
   const modeText = mode === 'racconto' ? MODES.racconto[correction === 'fine' ? 'fine' : 'subito'] : MODES[mode] || MODES.libera;
 
   let noteText;
@@ -85,7 +90,7 @@ export function buildSystem({ mode, correction, note, vault }) {
       ? `Non è ancora aperta nessuna nota. Se l'utente non ha detto quale lezione o argomento studiare, chiediglielo brevemente e poi aprila dal vault.`
       : `Non ci sono appunti caricati: usa la tua conoscenza generale e dillo quando correggi ("in generale…"). Se l'utente non ha detto di che argomento si tratta, chiediglielo.`;
   }
-  return `${BASE}\n\n${modeText}\n\n${noteText}${vaultSection(vault)}`;
+  return `${BASE}\n\n${modeText}\n\n${noteText}${memorySection(memory)}${vaultSection(vault)}`;
 }
 
 export const FINISHED_PREFIX = '[L\'utente ha finito di raccontare. Ecco tutta la sua esposizione:]\n';

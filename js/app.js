@@ -1,12 +1,13 @@
-import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171215';
-import { Listener, speechSupported } from './speech.js?v=202611171215';
-import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171215';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171215';
-import { buildSystem, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171215';
+import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171242';
+import { Listener, speechSupported } from './speech.js?v=202611171242';
+import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171242';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171242';
+import { buildSystem, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171242';
 
-import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171215';
-import { LiveSession, pickLiveModels, LIVE_VOICES } from './live.js?v=202611171215';
-import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter } from './ui.js?v=202611171215';
+import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171242';
+import { LiveSession, pickLiveModels, LIVE_VOICES } from './live.js?v=202611171242';
+import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611171242';
+import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611171242';
 
 const $ = (s) => document.querySelector(s);
 
@@ -22,6 +23,7 @@ const DEFAULTS = {
   liveModel: '', // modello Gemini Live preferito (vuoto = scelta automatica)
   liveVoice: 'Kore',
   liveModels: [], // modelli Live disponibili per la chiave
+  annotate: true, // registra argomento, concetti ed errori dopo ogni risposta
   rate: 1.05,
   mute: false,
   autosend: true,
@@ -62,6 +64,12 @@ let liveModelName = '';
 let lastErrorAt = 0;
 let activityStart = 0; // inizio della sessione di studio corrente (per la durata nel pannello)
 const micMeter = new MicMeter();
+// Progressi di studio (annotatore in background)
+let pendingUser = ''; // ciò che l'utente ha detto dall'ultima risposta di JARVIS
+let annotating = false;
+const annotateQueue = [];
+let studyError = '';
+let studySig = '';
 
 const MODE_HELP = {
   racconto: () => settings.correction === 'fine'
@@ -153,7 +161,10 @@ function sendUser(text, prefix = '', { hidden = false } = {}) {
   }
   if (controller) controller.abort();
   speaker.cancel();
-  if (!hidden) addBubble('user', text);
+  if (!hidden) {
+    addBubble('user', text);
+    pendingUser += `${pendingUser ? '\n' : ''}${text}`;
+  }
   addUserTurn(prefix + text);
   respond();
 }
@@ -191,7 +202,7 @@ async function respond() {
         key: settings.key,
         model: settings.model || DEFAULTS.model,
         fast: settings.fast,
-        system: buildSystem({ mode, correction: settings.correction, note, vault: vaultInfo() }),
+        system: buildSystem({ mode, correction: settings.correction, note, vault: vaultInfo(), memory: studyMemory() }),
         contents: modelHistory(),
         tools: vault.root ? VAULT_TOOLS : undefined,
         signal: ctrl.signal,
@@ -240,6 +251,10 @@ async function respond() {
       const last = history[history.length - 1];
       if (last?.role === 'model' && last.parts.some((p) => p.functionCall)) history.pop();
       controller = null;
+    }
+    if (full.trim() && !ctrl.signal.aborted) {
+      queueAnnotate(pendingUser, full);
+      pendingUser = '';
     }
     if (full.trim()) {
       if (ctrl.signal.aborted && !timedOut) renderInto(bubble, `${full} …`);
@@ -323,6 +338,7 @@ async function startNewSession() {
   session = newSession();
   session.mode = mode;
   activityStart = 0;
+  pendingUser = '';
   history = [];
   buffer = '';
   showLive('');
@@ -339,12 +355,15 @@ function commitLiveUser() {
   if (!t) return;
   addBubble('user', t);
   addUserTurn(t);
+  pendingUser += `${pendingUser ? '\n' : ''}${t}`;
 }
 function commitLiveBot(suffix = '') {
   const t = liveBot.trim();
   if (t) {
     history.push({ role: 'model', parts: [{ text: t }] });
     if (suffix && liveBotBubble) renderInto(liveBotBubble, t + suffix);
+    queueAnnotate(pendingUser, t);
+    pendingUser = '';
   }
   liveBot = '';
   liveBotBubble = null;
@@ -408,7 +427,7 @@ async function connectLive(i) {
     key: settings.key,
     model,
     voice: settings.liveVoice,
-    system: buildSystem({ mode, correction: settings.correction, note, vault: vaultInfo() }) + LIVE_EXTRA,
+    system: buildSystem({ mode, correction: settings.correction, note, vault: vaultInfo(), memory: studyMemory() }) + LIVE_EXTRA,
     tools: vault.root ? VAULT_TOOLS : undefined,
     seed: liveSeed(),
     kickoff,
@@ -471,6 +490,64 @@ function stopLive() {
   touchSession();
 }
 
+// ---------- Progressi di studio ----------
+function studyOf(s = session) {
+  if (!s.study) s.study = emptyStudy();
+  return s.study;
+}
+function priorStudy() {
+  return priorFromSessions(sessionsCache, note?.path || session.notePath, session.id, studyOf());
+}
+function studyMemory() {
+  return memoryText(studyOf(), priorStudy());
+}
+function annotatorModel() {
+  return settings.fallbacks?.[0] || settings.model || DEFAULTS.model;
+}
+function queueAnnotate(user, reply) {
+  if (!settings.annotate || !settings.key || !String(reply).trim()) return;
+  annotateQueue.push({ user: user.trim(), reply, sessionId: session.id, noteTitle: note?.title || '' });
+  runAnnotator();
+}
+async function runAnnotator() {
+  if (annotating) return;
+  annotating = true;
+  refreshStudy();
+  while (annotateQueue.length) {
+    const job = annotateQueue.shift();
+    const target = job.sessionId === session.id ? session : sessionsCache.find((x) => x.id === job.sessionId);
+    if (!target) continue;
+    try {
+      const delta = await annotate({ key: settings.key, model: annotatorModel(), user: job.user, reply: job.reply, study: studyOf(target), noteTitle: job.noteTitle });
+      studyError = delta ? '' : 'risposta non valida';
+      if (mergeStudy(studyOf(target), delta)) {
+        if (target === session) touchSession();
+        else await saveSession(target, vault.root);
+      }
+    } catch (err) {
+      studyError = String(err.message || err).slice(0, 90);
+    }
+  }
+  annotating = false;
+  refreshStudy();
+}
+function removeStudyItem(kind, item) {
+  const list = studyOf()[kind];
+  const i = list.indexOf(item);
+  if (i >= 0) list.splice(i, 1);
+  studyOf().updatedAt = Date.now();
+  touchSession();
+  refreshStudy(true);
+}
+function refreshStudy(force = false) {
+  const st = studyOf();
+  const prior = priorStudy();
+  const sig = JSON.stringify([session.id, st, prior, annotating, settings.annotate, studyError, note?.title]);
+  if (!force && sig === studySig) return;
+  studySig = sig;
+  renderStudy({ study: st, prior, busy: annotating, enabled: settings.annotate, error: studyError, lesson: note?.title, onRemove: removeStudyItem });
+}
+
 // ---------- Conversazioni salvate (pannello a destra) ----------
 let saveTimer = null;
 function touchSession() {
@@ -528,6 +605,7 @@ function when(ts) {
 
 async function renderSessions() {
   sessionsCache = await listSessions();
+  refreshStudy();
   const box = $('#session-list');
   if (!box) return;
   if (!sessionsCache.length) {
@@ -585,6 +663,7 @@ async function loadSession(id) {
   try {
     session = s;
     activityStart = Date.now();
+    pendingUser = '';
     history = Array.isArray(s.history) ? s.history : [];
     setMode(s.mode || 'racconto', { silent: true });
     $('#log').replaceChildren();
@@ -705,6 +784,7 @@ function refreshChrome() {
   else if (listener.active) setConnection('active', 'Microfono attivo');
   else setConnection('idle', 'Pronto');
   renderContext(contextData());
+  refreshStudy();
 }
 
 function updateStatus() {
@@ -962,6 +1042,7 @@ function fillLiveModels() {
 }
 
 function openSettings() {
+  $('#set-annotate').checked = settings.annotate !== false;
   fillLiveModels();
   $('#set-live-voice').replaceChildren(...LIVE_VOICES.map((v) => new Option(v, v)));
   $('#set-live-voice').value = settings.liveVoice || 'Kore';
@@ -990,6 +1071,8 @@ function readSettingsForm() {
   settings.mute = $('#set-mute').checked;
   settings.autosend = $('#set-autosend').checked;
   settings.liveModel = $('#set-live-model').value;
+  settings.annotate = $('#set-annotate').checked;
+  refreshStudy(true);
   settings.liveVoice = $('#set-live-voice').value || 'Kore';
   saveSettings();
   applyVoiceSettings();
@@ -1060,6 +1143,7 @@ function init() {
       commitLiveUser();
       addBubble('user', t);
       addUserTurn(t);
+      pendingUser += `${pendingUser ? '\n' : ''}${t}`;
       live.sendText(t);
       return;
     }

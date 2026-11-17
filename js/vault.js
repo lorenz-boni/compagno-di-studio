@@ -1,4 +1,4 @@
-import { dbGet, dbPut } from './db.js?v=202611171215';
+import { dbGet, dbPut } from './db.js?v=202611171242';
 
 // Accesso diretto alla cartella del vault Obsidian con la File System Access API (Chrome/Edge su PC).
 

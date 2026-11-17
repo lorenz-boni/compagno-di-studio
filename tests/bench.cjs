@@ -31,7 +31,7 @@ const srv = http.createServer((req, res) => {
     await new Promise((r) => setTimeout(r, d));
     await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: 'Ciao!' }] } }] })}\n\n` });
   });
-  await page.addInitScript(() => localStorage.setItem('compagno.settings', JSON.stringify({ key: 'TEST' })));
+  await page.addInitScript(() => localStorage.setItem('compagno.settings', JSON.stringify({ annotate: false, key: 'TEST' })));
   await page.goto('http://localhost:8767/');
   await page.click('#btn-settings');
   await page.click('#btn-bench');

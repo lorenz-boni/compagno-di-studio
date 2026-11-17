@@ -30,7 +30,7 @@ const srv = http.createServer((req, res) => {
     await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: sse });
   });
   await page.addInitScript(() => {
-    localStorage.setItem('compagno.settings', JSON.stringify({ key: 'TEST', pause: 1, mute: true }));
+    localStorage.setItem('compagno.settings', JSON.stringify({ annotate: false, key: 'TEST', pause: 1, mute: true }));
     const file = (name, text) => ({ kind: 'file', name, getFile: async () => ({ text: async () => text }) });
     const dir = (name, children) => ({
       kind: 'directory', name,

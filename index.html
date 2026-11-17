@@ -9,7 +9,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='%2300C8FF' stroke-width='8'/><circle cx='50' cy='50' r='18' fill='%2300C8FF'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=202611171215">
+  <link rel="stylesheet" href="styles.css?v=202611171242">
 </head>
 <body data-core="idle">
   <!-- Icone (stile lineare, disegnate qui: nessuna libreria esterna) -->
@@ -59,7 +59,7 @@
       </svg>
       <div class="brand-text">
         <span class="brand-name">JARVIS</span>
-        <span class="brand-sub">Compagno di studio <small id="app-version" class="version">v202611171215</small></span>
+        <span class="brand-sub">Compagno di studio <small id="app-version" class="version">v202611171242</small></span>
       </div>
     </div>
 
@@ -160,10 +160,42 @@
       <div id="pane-context" class="pane" role="tabpanel" aria-labelledby="tab-context">
         <div class="ctx-subject"><svg class="ic"><use href="#i-book"/></svg><span id="ctx-subject">Nessuna materia</span></div>
         <div class="ctx-topic">
-          <span class="ctx-kicker">Lezione corrente</span>
-          <strong id="ctx-lesson">Nessuna nota aperta</strong>
+          <span class="ctx-kicker">Argomento attuale</span>
+          <strong id="ctx-topic-text">—</strong>
         </div>
+
+        <section class="study" id="study" aria-label="Progressi di studio">
+          <div class="study-head">
+            <div>
+              <div class="study-title"><svg class="ic"><use href="#i-target"/></svg>Progressi</div>
+              <span class="hint" id="study-status">Registrati da JARVIS man mano che parlate.</span>
+            </div>
+            <div class="ring" id="study-ring" hidden title="Concetti chiari sul totale dei concetti emersi in questa sessione">
+              <svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15.5" class="ring-bg"/><circle cx="18" cy="18" r="15.5" class="ring-fg" id="study-ring-fg"/></svg>
+              <span id="study-ring-text"></span>
+            </div>
+          </div>
+          <p class="hint" id="study-empty">Ancora niente: argomento, concetti chiari, da consolidare ed errori compaiono qui mentre ripassi.</p>
+          <div class="study-group warn" id="study-review-box" hidden>
+            <h4><svg class="ic"><use href="#i-alert"/></svg>Da consolidare <span class="n" id="study-review-n"></span></h4>
+            <ul id="study-review"></ul>
+          </div>
+          <div class="study-group bad" id="study-errors-box" hidden>
+            <h4><svg class="ic"><use href="#i-x"/></svg>Errori <span class="n" id="study-errors-n"></span></h4>
+            <ul id="study-errors"></ul>
+          </div>
+          <div class="study-group good" id="study-learned-box" hidden>
+            <h4><svg class="ic"><use href="#i-check"/></svg>Chiari <span class="n" id="study-learned-n"></span></h4>
+            <ul id="study-learned"></ul>
+          </div>
+          <details class="study-group prior" id="study-prior-box" hidden>
+            <summary><svg class="ic"><use href="#i-history"/></svg>Dalle sessioni precedenti <span class="n" id="study-prior-n"></span></summary>
+            <ul id="study-prior"></ul>
+          </details>
+        </section>
+
         <dl class="ctx-list">
+          <div><dt><svg class="ic"><use href="#i-file"/></svg>Fonte</dt><dd id="ctx-lesson">Nessuna nota aperta</dd></div>
           <div><dt><svg class="ic"><use href="#i-cap"/></svg>Modalità</dt><dd id="ctx-mode">—</dd></div>
           <div><dt><svg class="ic"><use href="#i-clock"/></svg>Durata sessione</dt><dd id="ctx-duration">—</dd></div>
           <div><dt><svg class="ic"><use href="#i-chat"/></svg>Interventi tuoi</dt><dd id="ctx-turns">0</dd></div>
@@ -171,10 +203,6 @@
           <div><dt><svg class="ic"><use href="#i-mic"/></svg>Microfono</dt><dd id="ctx-mic">spento</dd></div>
           <div><dt><svg class="ic"><use href="#i-clock"/></svg>Ultima risposta</dt><dd id="ctx-latency">—</dd></div>
         </dl>
-        <div class="ctx-concepts">
-          <div class="ctx-concepts-head"><svg class="ic"><use href="#i-alert"/></svg>Concetti e errori</div>
-          <p class="hint">Concetti acquisiti, da consolidare ed errori ricorrenti <strong>non sono ancora registrati</strong> dall'app, quindi qui non mostro numeri inventati. Per un quadro di questa sessione usa <em>Facciamo il punto</em>.</p>
-        </div>
       </div>
 
       <div id="pane-history" class="pane" role="tabpanel" aria-labelledby="tab-history" hidden>
@@ -256,6 +284,8 @@
 
       <label class="check"><input id="set-autosend" type="checkbox"> Invia da solo il testo dettato con Wispr Flow</label>
 
+      <label class="check"><input id="set-annotate" type="checkbox"> Registra i progressi (argomento, concetti, errori): una richiesta in più a Gemini dopo ogni risposta</label>
+
       <div class="dialog-actions">
         <button type="button" id="btn-test-voice" class="btn-ghost">🔊 Prova voce</button>
         <button value="ok" class="btn-primary">Salva</button>
@@ -322,6 +352,6 @@
       document.head.appendChild(l);
     });
   </script>
-  <script type="module" src="js/app.js?v=202611171215"></script>
+  <script type="module" src="js/app.js?v=202611171242"></script>
 </body>
 </html>

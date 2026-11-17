@@ -8,7 +8,8 @@ Un compagno di corso **vocale** che ti ascolta mentre ripeti e ti corregge quand
 
 - **Nucleo centrale animato** con 6 stati: in attesa, ascolto, elaborazione, parla, pausa, errore. In "Parla con JARVIS" le onde seguono il volume reale di microfono e voce. Con il microfono classico seguono il volume del microfono; mentre parla la voce di Chrome il movimento è solo indicativo, perché Chrome non dà accesso a quell'audio.
 - **Libreria** a sinistra e **Contesto / Cronologia** a destra, comprimibili. Ci sono anche la modalità *full immersion* e lo schermo intero. Su smartphone i pannelli diventano pannelli apribili.
-- **Contesto di studio**: mostra solo dati reali (materia, lezione, modalità, durata, interventi, voce, microfono, tempo di risposta). Concetti acquisiti ed errori ricorrenti non vengono ancora registrati e il pannello lo dice.
+- **Contesto di studio**: mostra materia, argomento attuale, fonte, modalità, durata, interventi, voce, microfono e tempo di risposta.
+- **Progressi**: dopo ogni risposta un *annotatore* lavora in background, quindi la conversazione non rallenta. Legge la tua frase e la risposta di JARVIS e registra argomento, concetti **chiari**, **da consolidare** ed **errori**. Gli errori ripetuti vengono contati (×2, ×3…). Registra solo ciò che emerge davvero dallo scambio, e puoi togliere a mano un elemento sbagliato. I progressi si salvano nella conversazione. Nelle conversazioni successive sugli stessi appunti compaiono come *"Dalle sessioni precedenti"* e JARVIS li riceve come memoria, così torna sui tuoi punti deboli. L'anello percentuale mostra i concetti chiari sul totale dei concetti emersi, ed è visibile solo da 3 concetti in su. Costa una richiesta in più a Gemini per ogni risposta: si disattiva in ⚙️ Impostazioni.
 - I font Inter e Sora arrivano da Google Fonts dopo il caricamento della pagina. Se non si caricano, si usano quelli di sistema.
 
 ## Cosa fa
@@ -63,6 +64,7 @@ Poi apri <http://localhost:8000>.
 - `js/speech.js`: microfono, con il riconoscimento vocale del browser.
 - `js/tts.js`: voce, con la sintesi vocale del browser.
 - `js/vault.js`: lettura e scrittura del vault Obsidian.
+- `js/study.js`: annotatore dei progressi (argomento, concetti, errori) e memoria per JARVIS.
 - `js/ui.js`: interfaccia (pannelli, nucleo animato, onde, indicatore di connessione, contesto).
 - `tests/*.cjs`: prove automatiche con Playwright (Gemini, Gemini Live e microfono simulati). Si lanciano con `node tests/<nome>.cjs .`
 - `PIANO.md`: piano di sviluppo.
