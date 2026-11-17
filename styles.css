@@ -98,20 +98,40 @@ input, textarea, select {
 }
 .notes h2 { margin: 0; font-size: 1rem; }
 .note-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.note-list { list-style: none; margin: 0; padding: 0; overflow: auto; max-height: 45vh; }
-.note-list li button {
+.note-tree { overflow: auto; flex: 1; min-height: 120px; font-size: 0.92rem; }
+.tree-folder > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25em 0.4em;
+  border-radius: 6px;
+  user-select: none;
+}
+.tree-folder > summary::-webkit-details-marker { display: none; }
+.tree-folder > summary::before { content: "▸"; color: var(--muted); width: 1em; transition: transform 0.12s; }
+.tree-folder[open] > summary::before { transform: rotate(90deg); }
+.tree-folder > summary:hover { background: var(--user); }
+.folder-name { font-weight: 600; flex: 1; overflow-wrap: anywhere; }
+.count { color: var(--muted); font-size: 0.8em; }
+.tree-children { margin-left: 0.85rem; padding-left: 0.4rem; border-left: 1px solid var(--border); }
+.tree-note {
+  display: flex;
+  flex-direction: column;
   width: 100%;
   text-align: left;
   background: transparent;
   color: var(--text);
   border: none;
   border-radius: 6px;
-  padding: 0.3em 0.5em;
+  padding: 0.25em 0.5em;
   white-space: normal;
-  font-size: 0.9rem;
+  font-size: inherit;
 }
-.note-list li button:hover, .note-list li button[aria-current="true"] { background: var(--user); }
-.note-list .dir { color: var(--muted); }
+.tree-note:hover { background: var(--user); }
+.tree-note[aria-current="true"] { background: var(--user); font-weight: 600; }
+.tree-note .dir { color: var(--muted); font-size: 0.82em; font-weight: normal; }
 .current-note { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.6rem; }
 .current-head { display: flex; justify-content: space-between; gap: 0.5rem; align-items: start; }
 .current-note pre { white-space: pre-wrap; font-size: 0.8rem; max-height: 30vh; overflow: auto; margin: 0.4rem 0 0; }

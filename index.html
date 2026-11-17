@@ -29,8 +29,8 @@
         <label class="button ghost">📄 Carica .md<input id="file-input" type="file" accept=".md,.markdown,.txt" multiple hidden></label>
         <button id="btn-paste" class="ghost">📋 Incolla testo</button>
       </div>
-      <input id="note-search" type="search" placeholder="Cerca una nota…" hidden>
-      <ul id="note-list" class="note-list"></ul>
+      <input id="note-search" type="search" placeholder="Cerca nota (es. fluido 1 lez 3)…" hidden autocomplete="off">
+      <div id="note-tree" class="note-tree" role="tree" aria-label="Note del vault"></div>
       <div id="current-note" class="current-note" hidden>
         <div class="current-head">
           <strong id="current-title"></strong>

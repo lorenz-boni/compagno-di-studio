@@ -38,7 +38,7 @@ const srv = http.createServer((req, res) => {
     const vault = dir('Università', [
       dir('.obsidian', [file('app.json', '{}')]),
       dir('Allegati', [file('foto.png', '')]),
-      dir('Fluidodinamica 1', [file('Lezione 01 - Intro.md', 'intro'), file('Lezione 03 - Bernoulli.md', 'Teorema di Bernoulli: p + ½ρv² + ρgz = costante lungo una linea di corrente.')]),
+      dir('Fluidodinamica 1', [dir('Lezioni', [file('Lezione 10 - Strato limite.md', 'sl'), file('Lezione 2 - Statica.md', 'statica'), file('Lezione 01 - Intro.md', 'intro'), file('Lezione 03 - Bernoulli.md', 'Teorema di Bernoulli: p + ½ρv² + ρgz = costante lungo una linea di corrente.')]), file('Formulario.md', 'f')]),
       dir('Analisi 1', [file('Lezione 3.md', 'limiti')]),
     ]);
     window.showDirectoryPicker = async () => vault;
@@ -48,16 +48,30 @@ const srv = http.createServer((req, res) => {
   await page.click('#btn-vault');
   await page.waitForSelector('#vault-status:not([hidden])');
   console.log('stato vault:', await page.textContent('#vault-status'));
+  console.log('cartelle principali:', await page.$$eval('#note-tree > details > summary', (s) => s.map((x) => x.textContent)));
+  await page.click('#note-tree summary:has-text("Fluidodinamica 1")');
+  await page.click('#note-tree summary:has-text("Lezioni")');
+  await page.waitForSelector('details[data-path="Fluidodinamica 1/Lezioni"] .tree-note');
+  console.log('lezioni in ordine:', await page.$$eval('details[data-path="Fluidodinamica 1/Lezioni"] .tree-note', (b) => b.map((x) => x.textContent)));
+  await page.click('#note-tree summary:has-text("Fluidodinamica 1")'); // richiude
+  await page.fill('#note-search', 'fluido 1 lez 2');
+  console.log('ricerca "fluido 1 lez 2":', await page.$$eval('#note-tree .tree-note', (b) => b.map((x) => x.title)));
+  await page.press('#note-search', 'Enter');
+  console.log('aperta con Invio:', await page.textContent('#current-title'));
+  await page.fill('#note-search', '');
+  await page.dispatchEvent('#note-search', 'input');
   await page.fill('#text-input', 'cerca in fluidodinamica uno la lezione numero tre');
   await page.press('#text-input', 'Enter');
   await page.waitForSelector('.bubble.bot >> text=Inizia pure', { timeout: 5000 });
   console.log('nota aperta:', await page.textContent('#current-title'));
+  console.log('evidenziata nell\'albero:', await page.$$eval('.tree-note[aria-current="true"]', (b) => b.map((x) => x.title)));
   const lastBody = bodies[bodies.length - 1];
   console.log('appunti nel prompt:', lastBody.systemInstruction.parts[0].text.includes('Teorema di Bernoulli'));
   console.log('firma conservata:', JSON.stringify(lastBody.contents).includes('sig1'));
   console.log('strumenti inviati:', lastBody.tools[0].functionDeclarations.map((f) => f.name).join(','));
   console.log('messaggi info:', await page.$$eval('.bubble.info', (b) => b.map((x) => x.textContent)));
   // Il ricollegamento automatico dopo una ricarica va provato in Chrome vero: una cartella finta non si può salvare in IndexedDB.
+  await page.click('.bubble.bot'); // chiude eventuali focus
   await page.screenshot({ path: process.argv[3] || 'screenshot.png' });
   console.log('errori pagina:', errors.length ? errors : 'nessuno');
   await browser.close(); srv.close();

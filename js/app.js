@@ -300,40 +300,133 @@ function setNote(n, { announce = true } = {}) {
     $('#current-title').textContent = n.title;
     $('#current-text').textContent = n.text;
   }
-  document.querySelectorAll('#note-list button').forEach((b) => {
-    b.setAttribute('aria-current', String(Boolean(n?.path) && b.dataset.path === n.path));
-  });
+  highlightCurrent();
   if (announce) addBubble('info', n ? `📂 Appunti: «${n.path || n.title}».` : 'Appunti rimossi.');
 }
 
+// ---------- Esploratore delle note (come in Obsidian) ----------
+let openFolders = new Set();
+try { openFolders = new Set(JSON.parse(localStorage.getItem('compagno.openFolders') || '[]')); } catch { /* ignora */ }
+function saveOpenFolders() {
+  try { localStorage.setItem('compagno.openFolders', JSON.stringify([...openFolders])); } catch { /* ignora */ }
+}
+
+function buildTree(notes) {
+  const root = { folders: new Map(), notes: [], count: 0 };
+  for (const n of notes) {
+    const parts = n.path.split('/');
+    const file = parts.pop();
+    let node = root;
+    node.count++;
+    let acc = '';
+    for (const p of parts) {
+      acc = acc ? `${acc}/${p}` : p;
+      if (!node.folders.has(p)) node.folders.set(p, { path: acc, folders: new Map(), notes: [], count: 0 });
+      node = node.folders.get(p);
+      node.count++;
+    }
+    node.notes.push({ ...n, name: file.replace(/\.md$/i, '') });
+  }
+  return root;
+}
+
+const byName = (a, b) => a.localeCompare(b, 'it', { numeric: true, sensitivity: 'base' });
+
+function noteButton(n, label) {
+  const b = document.createElement('button');
+  b.className = 'tree-note';
+  b.dataset.path = n.path;
+  b.setAttribute('role', 'treeitem');
+  b.innerHTML = label;
+  b.title = n.path;
+  b.onclick = async () => {
+    try { await openNote(n); } catch (err) { addBubble('error', `Non riesco a leggere la nota: ${err.message}`); }
+  };
+  return b;
+}
+
+function renderFolder(node, container) {
+  for (const name of [...node.folders.keys()].sort(byName)) {
+    const f = node.folders.get(name);
+    const det = document.createElement('details');
+    det.className = 'tree-folder';
+    det.dataset.path = f.path;
+    det.open = openFolders.has(f.path);
+    const sum = document.createElement('summary');
+    sum.innerHTML = `<span class="folder-name">${escapeHtml(name)}</span><span class="count">${f.count}</span>`;
+    det.append(sum);
+    const inner = document.createElement('div');
+    inner.className = 'tree-children';
+    det.append(inner);
+    // Il contenuto viene creato solo quando apri la cartella: veloce anche con vault grandi.
+    const fill = () => { if (!inner.childElementCount) renderFolder(f, inner); };
+    det.fill = fill;
+    if (det.open) fill();
+    det.addEventListener('toggle', () => {
+      if (det.open) { openFolders.add(f.path); fill(); highlightCurrent(); } else openFolders.delete(f.path);
+      saveOpenFolders();
+    });
+    container.append(det);
+  }
+  for (const n of [...node.notes].sort((a, b) => byName(a.name, b.name))) {
+    container.append(noteButton(n, `📄 ${escapeHtml(n.name)}`));
+  }
+}
+
 function renderNoteList() {
-  const q = $('#note-search').value.trim().toLowerCase();
-  const list = $('#note-list');
-  const items = vault.notes.filter((n) => !q || n.path.toLowerCase().includes(q)).slice(0, 400);
-  list.replaceChildren(...items.map((n) => {
-    const li = document.createElement('li');
-    const b = document.createElement('button');
-    b.dataset.path = n.path;
-    const slash = n.path.lastIndexOf('/');
-    b.innerHTML = slash >= 0
-      ? `<span class="dir">${escapeHtml(n.path.slice(0, slash + 1))}</span>${escapeHtml(n.path.slice(slash + 1, -3))}`
-      : escapeHtml(n.path.slice(0, -3));
-    b.setAttribute('aria-current', String(note?.path === n.path));
-    b.onclick = async () => {
-      try {
-        await openNote(n);
-      } catch (err) {
-        addBubble('error', `Non riesco a leggere la nota: ${err.message}`);
-      }
-    };
-    li.append(b);
-    return li;
-  }));
+  const tree = $('#note-tree');
+  const q = $('#note-search').value.trim();
+  if (q) {
+    const lower = q.toLowerCase();
+    const found = searchNotes(vault.notes, q, 60, { requireAll: true });
+    const extra = vault.notes.filter((n) => n.path.toLowerCase().includes(lower) && !found.includes(n.path)).map((n) => n.path);
+    const paths = [...found, ...extra].slice(0, 60);
+    const box = document.createElement('div');
+    box.className = 'search-results';
+    if (!paths.length) box.innerHTML = '<p class="hint">Nessuna nota trovata.</p>';
+    for (const p of paths) {
+      const n = vault.notes.find((x) => x.path === p);
+      const slash = p.lastIndexOf('/');
+      const name = escapeHtml(p.slice(slash + 1).replace(/\.md$/i, ''));
+      const dir = slash >= 0 ? `<span class="dir">${escapeHtml(p.slice(0, slash))}</span>` : '';
+      box.append(noteButton(n, `<span>📄 ${name}</span>${dir}`));
+    }
+    tree.replaceChildren(box);
+  } else {
+    tree.replaceChildren();
+    renderFolder(buildTree(vault.notes), tree);
+  }
+  highlightCurrent();
+}
+
+/** Evidenzia la nota aperta e apre le sue cartelle, come fa Obsidian. */
+function highlightCurrent({ reveal = false } = {}) {
+  const tree = $('#note-tree');
+  if (!tree) return;
+  if (reveal && note?.path && !$('#note-search').value.trim()) {
+    const parts = note.path.split('/').slice(0, -1);
+    let acc = '';
+    for (const p of parts) {
+      acc = acc ? `${acc}/${p}` : p;
+      const det = tree.querySelector(`details[data-path="${CSS.escape(acc)}"]`);
+      if (!det) break;
+      det.open = true;
+      det.fill(); // crea subito il contenuto, così la sottocartella successiva esiste già
+      openFolders.add(acc);
+    }
+    saveOpenFolders();
+  }
+  tree.querySelectorAll('.tree-note').forEach((b) => {
+    const cur = Boolean(note?.path) && b.dataset.path === note.path;
+    b.setAttribute('aria-current', String(cur));
+    if (cur && reveal) b.scrollIntoView({ block: 'nearest' });
+  });
 }
 
 async function openNote(n, opts) {
   const text = await readNote(n.handle);
   setNote({ title: n.path.split('/').pop().replace(/\.md$/i, ''), text, path: n.path }, opts);
+  highlightCurrent({ reveal: true });
 }
 
 /** Collega il vault. `quiet`: all'avvio automatico, senza messaggi se va tutto bene. */
@@ -502,6 +595,10 @@ function init() {
   };
   autoConnectVault();
   $('#note-search').oninput = renderNoteList;
+  $('#note-search').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); $('#note-tree .tree-note')?.click(); }
+    if (e.key === 'Escape') { e.target.value = ''; renderNoteList(); }
+  });
   $('#file-input').onchange = async (e) => {
     const files = [...e.target.files];
     if (!files.length) return;

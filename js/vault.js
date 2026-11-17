@@ -26,7 +26,7 @@ export async function listNotes(dir, prefix = '') {
       out.push({ path: `${prefix}${name}`, handle });
     }
   }
-  return out.sort((a, b) => a.path.localeCompare(b.path, 'it'));
+  return out.sort((a, b) => a.path.localeCompare(b.path, 'it', { numeric: true }));
 }
 
 export async function readNote(fileHandle) {
@@ -131,20 +131,26 @@ export function tokens(s) {
     .filter((t) => !STOP.has(t));
 }
 
-/** Restituisce le note più simili alla richiesta, dalla più probabile. */
-export function searchNotes(notes, query, limit = 12) {
+/**
+ * Restituisce le note più simili alla richiesta, dalla più probabile.
+ * `requireAll`: ogni parola cercata deve comparire (ricerca mentre scrivi, come in Obsidian).
+ */
+export function searchNotes(notes, query, limit = 12, { requireAll = false } = {}) {
   const q = [...new Set(tokens(query))];
   if (!q.length) return [];
   const scored = notes.map((n) => {
     const all = tokens(n.path.replace(/\.md$/i, ''));
     const name = tokens(n.path.split('/').pop().replace(/\.md$/i, ''));
     let score = 0;
+    let matched = 0;
+    const minPrefix = requireAll ? 2 : 4;
     for (const t of q) {
       const isNum = /^\d+$/.test(t);
-      if (name.includes(t)) score += isNum ? 4 : 3;
-      else if (all.includes(t)) score += isNum ? 2 : 2;
-      else if (!isNum && t.length >= 4 && all.some((w) => w.startsWith(t) || t.startsWith(w) && w.length >= 4)) score += 1;
+      if (name.includes(t)) { score += isNum ? 4 : 3; matched++; }
+      else if (all.includes(t)) { score += 2; matched++; }
+      else if (!isNum && t.length >= minPrefix && all.some((w) => w.startsWith(t) || (t.startsWith(w) && w.length >= 4))) { score += 1; matched++; }
     }
+    if (requireAll && matched < q.length) score = 0;
     return { path: n.path, score };
   });
   return scored
