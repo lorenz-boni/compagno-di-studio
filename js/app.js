@@ -1,4 +1,4 @@
-import { streamChat, complete, listModels } from './gemini.js';
+import { streamChat, complete, listModels, benchmark, FALLBACK_MODELS } from './gemini.js';
 import { Listener, speechSupported } from './speech.js';
 import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js';
 import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js';
@@ -134,7 +134,7 @@ function vaultInfo() {
   return vault.root ? { count: vault.notes.length, folders: folderOverview(vault.notes) } : null;
 }
 
-const FIRST_TOKEN_TIMEOUT = 25000;
+const FIRST_TOKEN_TIMEOUT = 60000; // sicurezza finale: i cambi di modello avvengono già dopo 10 s
 
 async function respond() {
   const ctrl = new AbortController();
@@ -200,7 +200,7 @@ async function respond() {
       $('#log').append(bubble); // la risposta va sotto ai messaggi "Cerco… / Appunti…"
     }
   } catch (err) {
-    if (timedOut) addBubble('error', `Gemini non ha risposto entro ${FIRST_TOKEN_TIMEOUT / 1000} secondi. Riprova; se succede spesso, nelle impostazioni scegli un modello più veloce (es. gemini-flash-lite-latest).`);
+    if (timedOut) addBubble('error', `Gemini non ha risposto entro ${FIRST_TOKEN_TIMEOUT / 1000} secondi. Riprova; in ⚙️ Impostazioni puoi usare «Prova velocità modelli» per scegliere il più rapido.`);
     else if (err.name !== 'AbortError') addBubble('error', err.message || String(err));
   } finally {
     clearTimeout(timer);
@@ -682,6 +682,34 @@ function init() {
     Object.assign(settings, prev);
     applyVoiceSettings();
   };
+  $('#btn-bench').onclick = async () => {
+    const key = $('#set-key').value.trim();
+    if (!key) { $('#set-key').focus(); return; }
+    const btn = $('#btn-bench');
+    const out = $('#bench-results');
+    btn.disabled = true;
+    btn.textContent = '⏱️ Sto misurando…';
+    out.replaceChildren();
+    const current = $('#set-model').value.trim() || DEFAULTS.model;
+    const models = [...new Set([current, 'gemini-flash-latest', ...FALLBACK_MODELS])];
+    const rows = await benchmark(key, models, (r) => {
+      const li = document.createElement('li');
+      const ok = r.status === 'ok';
+      li.innerHTML = `<button type="button" class="ghost small" ${ok ? '' : 'disabled'}>Usa</button> <strong>${escapeHtml(r.model)}</strong>: ${ok ? `${(r.ms / 1000).toFixed(1)} s` : escapeHtml(String(r.status))}`;
+      li.querySelector('button').onclick = () => { $('#set-model').value = r.model; };
+      out.append(li);
+    });
+    const best = rows.filter((r) => r.status === 'ok').sort((a, b) => a.ms - b.ms)[0];
+    if (best) {
+      $('#set-model').value = best.model;
+      const p = document.createElement('li');
+      p.className = 'hint';
+      p.textContent = `Ho scelto il più veloce: ${best.model}. Premi «Salva» per tenerlo.`;
+      out.append(p);
+    }
+    btn.disabled = false;
+    btn.textContent = '⏱️ Prova velocità modelli';
+  };
   $('#btn-load-models').onclick = async () => {
     const key = $('#set-key').value.trim();
     if (!key) { $('#set-key').focus(); return; }
@@ -731,6 +759,7 @@ async function makeSummary() {
       key: settings.key,
       model: settings.model || DEFAULTS.model,
       fast: false,
+      timeoutMs: 40000,
       system: buildSystem({ mode, correction: settings.correction, note }),
       contents: [...history, { role: 'user', parts: [{ text: summaryRequest(date) }] }],
     });

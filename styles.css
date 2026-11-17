@@ -198,3 +198,5 @@ dialog:has(.wide) { width: min(760px, calc(100vw - 32px)); }
   .notes { border-right: none; border-bottom: 1px solid var(--border); max-height: 40vh; }
   .topbar, .chat, .notes { padding-left: 16px; padding-right: 16px; }
 }
+.bench { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; }
+.bench:empty { display: none; }

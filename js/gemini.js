@@ -66,6 +66,7 @@ const thinkingChoice = new Map();
 export const FALLBACK_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 
 const sleep = (ms, signal) => new Promise((resolve, reject) => {
+  if (signal?.aborted) { reject(new DOMException('Interrotto', 'AbortError')); return; }
   const t = setTimeout(resolve, ms);
   signal?.addEventListener('abort', () => { clearTimeout(t); reject(new DOMException('Interrotto', 'AbortError')); }, { once: true });
 });
@@ -87,7 +88,86 @@ async function openStream(model, key, body, fast, signal) {
   }
 }
 
-export async function* streamChat({ key, model, system, contents, tools, fast = true, signal, onNotice }) {
+// Modelli che di recente sono stati lenti o sovraccarichi: per qualche minuto li proviamo per ultimi.
+const penalty = new Map();
+const PENALTY_MS = 5 * 60 * 1000;
+export const FIRST_CHUNK_TIMEOUT = 10000;
+
+function orderModels(model) {
+  const all = [model, ...FALLBACK_MODELS.filter((m) => m !== model)];
+  const now = Date.now();
+  const ok = all.filter((m) => !(penalty.get(m) > now));
+  const bad = all.filter((m) => penalty.get(m) > now);
+  return [...ok, ...bad];
+}
+
+/** Legge gli eventi SSE e restituisce gli oggetti JSON uno alla volta. */
+async function* readEvents(res) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let nl;
+      while ((nl = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, nl).trim();
+        buffer = buffer.slice(nl + 1);
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (!data) continue;
+        try { yield JSON.parse(data); } catch { /* riga incompleta */ }
+      }
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+}
+
+/**
+ * Apre la risposta su un modello e aspetta il primo pezzo entro `timeoutMs`.
+ * Restituisce { status, events, first } oppure { status: 'timeout' }.
+ */
+async function startModel(model, key, body, fast, signal, timeoutMs) {
+  const ctrl = new AbortController();
+  const onAbort = () => ctrl.abort();
+  if (signal?.aborted) ctrl.abort();
+  else signal?.addEventListener('abort', onAbort, { once: true });
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, timeoutMs);
+  try {
+    let res;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      res = await openStream(model, key, body, fast, ctrl.signal);
+      if (![500, 503].includes(res.status)) break;
+      if (attempt === 0) await sleep(800, ctrl.signal);
+    }
+    if (!res.ok) return { status: res.status, res };
+    const events = readEvents(res);
+    const first = await events.next();
+    return { status: 200, events, first };
+  } catch (err) {
+    if (timedOut && !signal?.aborted) return { status: 'timeout' };
+    throw err;
+  } finally {
+    // L'ascolto di `signal` resta attivo: serve a interrompere lo streaming anche dopo il primo pezzo.
+    clearTimeout(timer);
+  }
+}
+
+function toChunk(json) {
+  const parts = json?.candidates?.[0]?.content?.parts || [];
+  const text = parts.filter((p) => !p.thought && p.text).map((p) => p.text).join('');
+  return parts.length ? { text, parts, modelVersion: json.modelVersion } : null;
+}
+
+/**
+ * Risposta in streaming. Se il modello è sovraccarico (503), ha finito la quota (429)
+ * o non inizia a rispondere entro 10 s, si passa da soli ai modelli di riserva.
+ */
+export async function* streamChat({ key, model, system, contents, tools, fast = true, signal, onNotice, timeoutMs = FIRST_CHUNK_TIMEOUT }) {
   const body = {
     systemInstruction: { parts: [{ text: system }] },
     contents,
@@ -95,45 +175,34 @@ export async function* streamChat({ key, model, system, contents, tools, fast = 
   };
   if (tools) body.tools = tools;
 
-  // Se il modello è sovraccarico (503) riproviamo una volta, poi passiamo ai modelli di riserva.
-  // Lo stesso se la quota gratuita di quel modello è finita (429): ogni modello ha la sua.
-  const models = [model, ...FALLBACK_MODELS.filter((m) => m !== model)];
-  let res;
+  const models = orderModels(model);
+  let started = null;
+  let lastFail = null;
   for (let m = 0; m < models.length; m++) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      res = await openStream(models[m], key, body, fast, signal);
-      if (![500, 503].includes(res.status)) break;
-      if (attempt === 0) await sleep(1000, signal);
+    const r = await startModel(models[m], key, body, fast, signal, timeoutMs);
+    if (r.status === 200) { started = r; break; }
+    const switchable = r.status === 'timeout' || [429, 500, 503].includes(r.status) || (m > 0 && [400, 404].includes(r.status));
+    lastFail = r;
+    if (!switchable) break;
+    penalty.set(models[m], Date.now() + PENALTY_MS);
+    if (m < models.length - 1) {
+      const why = r.status === 'timeout' ? `non risponde entro ${timeoutMs / 1000} s`
+        : r.status === 429 ? 'ha finito la quota gratuita per ora' : 'è sovraccarico';
+      onNotice?.(`${models[m]} ${why}: provo con ${models[m + 1]}.`);
     }
-    if (res.ok) break;
-    const canSwitch = [429, 500, 503].includes(res.status) || (m > 0 && res.status === 404);
-    if (!canSwitch || m === models.length - 1) break;
-    onNotice?.(res.status === 429
-      ? `Quota gratuita di ${models[m]} finita per ora: provo con ${models[m + 1]}.`
-      : `${models[m]} è sovraccarico: provo con ${models[m + 1]}.`);
   }
-  if (!res.ok) throw await toError(res);
+  if (!started) {
+    if (lastFail?.status === 'timeout') throw new GeminiError('Nessun modello Gemini ha risposto in tempo: i server sono molto carichi. Riprova tra poco.', 0);
+    throw await toError(lastFail.res);
+  }
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let nl;
-    while ((nl = buffer.indexOf('\n')) >= 0) {
-      const line = buffer.slice(0, nl).trim();
-      buffer = buffer.slice(nl + 1);
-      if (!line.startsWith('data:')) continue;
-      const data = line.slice(5).trim();
-      if (!data) continue;
-      let json;
-      try { json = JSON.parse(data); } catch { continue; }
-      const parts = json?.candidates?.[0]?.content?.parts || [];
-      const text = parts.filter((p) => !p.thought && p.text).map((p) => p.text).join('');
-      if (parts.length) yield { text, parts, modelVersion: json.modelVersion };
-    }
+  if (!started.first.done) {
+    const c = toChunk(started.first.value);
+    if (c) yield c;
+  }
+  for await (const json of started.events) {
+    const c = toChunk(json);
+    if (c) yield c;
   }
 }
 
@@ -141,5 +210,40 @@ export async function* streamChat({ key, model, system, contents, tools, fast = 
 export async function complete(opts) {
   let out = '';
   for await (const chunk of streamChat(opts)) out += chunk.text;
+  return out;
+}
+
+/**
+ * Diagnostica: per ogni modello misura quanto ci mette a iniziare a rispondere a una domanda breve.
+ * Restituisce [{ model, ms, status, text }].
+ */
+export async function benchmark(key, models, onResult) {
+  const out = [];
+  for (const model of models) {
+    const t0 = performance.now();
+    let row;
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 30000);
+      const r = await startModel(model, key, {
+        systemInstruction: { parts: [{ text: 'Rispondi in italiano con una sola frase breve.' }] },
+        contents: [{ role: 'user', parts: [{ text: 'Ciao, come va?' }] }],
+        generationConfig: { temperature: 0.5 },
+      }, true, ctrl.signal, 30000);
+      clearTimeout(timer);
+      const ms = Math.round(performance.now() - t0);
+      if (r.status === 200) {
+        const c = r.first.done ? null : toChunk(r.first.value);
+        row = { model, ms, status: 'ok', text: c?.text || '' };
+        for await (const _ of r.events) { /* svuota */ }
+      } else {
+        row = { model, ms, status: r.status === 'timeout' ? 'oltre 30 s' : `errore ${r.status}` };
+      }
+    } catch (err) {
+      row = { model, ms: Math.round(performance.now() - t0), status: err.name === 'AbortError' ? 'oltre 30 s' : err.message };
+    }
+    out.push(row);
+    onResult?.(row);
+  }
   return out;
 }
