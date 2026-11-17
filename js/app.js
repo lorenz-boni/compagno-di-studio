@@ -1,11 +1,12 @@
-import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171143';
-import { Listener, speechSupported } from './speech.js?v=202611171143';
-import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171143';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171143';
-import { buildSystem, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171143';
+import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171215';
+import { Listener, speechSupported } from './speech.js?v=202611171215';
+import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171215';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171215';
+import { buildSystem, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171215';
 
-import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171143';
-import { LiveSession, pickLiveModels, LIVE_VOICES } from './live.js?v=202611171143';
+import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171215';
+import { LiveSession, pickLiveModels, LIVE_VOICES } from './live.js?v=202611171215';
+import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter } from './ui.js?v=202611171215';
 
 const $ = (s) => document.querySelector(s);
 
@@ -58,6 +59,9 @@ let liveBot = '';
 let liveBotBubble = null;
 let liveUserStopped = false;
 let liveModelName = '';
+let lastErrorAt = 0;
+let activityStart = 0; // inizio della sessione di studio corrente (per la durata nel pannello)
+const micMeter = new MicMeter();
 
 const MODE_HELP = {
   racconto: () => settings.correction === 'fine'
@@ -99,7 +103,8 @@ const listener = new Listener({
   onState: (on) => {
     const b = $('#btn-mic');
     b.setAttribute('aria-pressed', String(on));
-    b.textContent = on ? '⏹️ Smetti di ascoltare' : '🎙️ Inizia a parlare';
+    b.querySelector('.lbl').textContent = on ? 'Smetti di ascoltare' : 'Microfono classico';
+    if (on) micMeter.start(); else micMeter.stop();
     updateStatus();
   },
   onError: (msg) => addBubble('error', msg),
@@ -140,6 +145,7 @@ function addUserTurn(text) {
 }
 
 function sendUser(text, prefix = '', { hidden = false } = {}) {
+  if (!activityStart) activityStart = Date.now();
   if (!settings.key) {
     addBubble('error', 'Manca la chiave API di Gemini: inseriscila nelle impostazioni.');
     openSettings();
@@ -316,6 +322,7 @@ async function startNewSession() {
   await flushSave();
   session = newSession();
   session.mode = mode;
+  activityStart = 0;
   history = [];
   buffer = '';
   showLive('');
@@ -356,7 +363,8 @@ function liveSeed() {
 }
 function updateLiveUi() {
   const b = $('#btn-live');
-  b.textContent = live ? '📴 Chiudi chiamata' : '📞 Dal vivo';
+  b.querySelector('.lbl').textContent = live ? 'Chiudi chiamata' : 'Parla con JARVIS';
+  b.querySelector('use').setAttribute('href', live ? '#i-phone-off' : '#i-mic');
   b.setAttribute('aria-pressed', String(Boolean(live)));
   $('#btn-mic').disabled = Boolean(live);
   $('#btn-done').disabled = Boolean(live);
@@ -576,6 +584,7 @@ async function loadSession(id) {
   restoring = true;
   try {
     session = s;
+    activityStart = Date.now();
     history = Array.isArray(s.history) ? s.history : [];
     setMode(s.mode || 'racconto', { silent: true });
     $('#log').replaceChildren();
@@ -631,6 +640,10 @@ function addBubble(kind, text, { transient = false } = {}) {
   const li = document.createElement('li');
   li.className = `bubble ${kind}${transient ? ' transient' : ''}`;
   li.dataset.kind = kind;
+  if (kind === 'error') {
+    lastErrorAt = Date.now();
+    setTimeout(updateStatus, 6100);
+  }
   renderInto(li, text);
   $('#log').append(li);
   scrollLog();
@@ -647,7 +660,59 @@ function showLive(text) {
 }
 setInterval(() => { if (controller) updateStatus(); }, 1000);
 
+/** Stato del nucleo, indicatore di connessione e pannello del contesto. */
+function coreStateNow() {
+  if (Date.now() - lastErrorAt < 6000) return 'error';
+  if (live) {
+    if (liveState === 'connecting' || liveState === 'reconnecting') return 'processing';
+    return liveSpeaking ? 'speaking' : 'listening';
+  }
+  if (controller) return 'processing';
+  if (speaker.speaking) return 'speaking';
+  if (listener.active) return 'listening';
+  if (history.length) return 'paused';
+  return 'idle';
+}
+
+function userTurns() {
+  return history.filter((h) => h.role === 'user' && h.parts.some((p) => p.text && !p.text.startsWith('['))).length;
+}
+
+function contextData() {
+  if (history.length && !activityStart) activityStart = Date.now();
+  const mins = activityStart ? Math.max(0, Math.round((Date.now() - activityStart) / 60000)) : null;
+  return {
+    subject: subjectOf(note?.path) || (note ? 'Appunti caricati' : ''),
+    lesson: note?.title || '',
+    mode: MODE_NAMES[mode],
+    duration: mins === null ? '—' : `${mins} min`,
+    turns: userTurns(),
+    voice: live ? `Dal vivo · ${liveModelName}` : (settings.mute ? 'Solo testo' : 'Voce di Chrome'),
+    mic: live ? 'In chiamata' : (listener.active ? 'Attivo (Chrome)' : 'Spento'),
+    latency: lastTiming ? lastTiming.replace('Risposta iniziata dopo ', '') : '—',
+  };
+}
+
+function refreshChrome() {
+  const st = coreStateNow();
+  const label = live && liveState === 'connecting' ? 'Mi collego…' : live && liveState === 'reconnecting' ? 'Riconnessione…' : undefined;
+  setCoreState(st, label);
+  if (live && liveState === 'connected') setConnection('live', 'Sessione live');
+  else if (live) setConnection('warn', liveState === 'reconnecting' ? 'Riconnessione…' : 'Connessione…');
+  else if (!settings.key) setConnection('warn', 'Chiave mancante');
+  else if (st === 'error') setConnection('error', 'Errore');
+  else if (controller) setConnection('active', 'Elaborazione');
+  else if (listener.active) setConnection('active', 'Microfono attivo');
+  else setConnection('idle', 'Pronto');
+  renderContext(contextData());
+}
+
 function updateStatus() {
+  updateStatusText();
+  refreshChrome();
+}
+
+function updateStatusText() {
   const el = $('#status');
   let text = 'Pronto.';
   let cls = '';
@@ -656,17 +721,17 @@ function updateStatus() {
     text = {
       connecting: 'Mi collego a Gemini Live…',
       reconnecting: 'Riconnessione alla chiamata…',
-    }[liveState] || (liveSpeaking ? `Il compagno sta parlando… (interrompilo quando vuoi) · ${liveModelName}` : `📞 In chiamata: parla pure. · ${liveModelName}`);
+    }[liveState] || (liveSpeaking ? `JARVIS sta parlando… (interrompilo quando vuoi) · ${liveModelName}` : `📞 In chiamata: parla pure. · ${liveModelName}`);
     el.textContent = text;
     el.className = `status ${cls}`;
     return;
   }
   if (controller) {
     const secs = Math.floor((Date.now() - thinkingSince) / 1000);
-    text = `Il compagno sta pensando…${secs >= 2 ? ` ${secs} s` : ''}`;
+    text = `JARVIS sta pensando…${secs >= 2 ? ` ${secs} s` : ''}`;
     cls = 'thinking';
   }
-  else if (speaker.speaking) { text = 'Il compagno sta parlando… (parla pure per interromperlo)'; cls = 'speaking'; }
+  else if (speaker.speaking) { text = 'JARVIS sta parlando… (parla pure per interromperlo)'; cls = 'speaking'; }
   else if (listener.active) {
     cls = 'listening';
     text = mode === 'racconto' && settings.correction === 'fine'
@@ -765,7 +830,7 @@ function renderFolder(node, container) {
     container.append(det);
   }
   for (const n of [...node.notes].sort((a, b) => byName(a.name, b.name))) {
-    container.append(noteButton(n, `📄 ${escapeHtml(n.name)}`));
+    container.append(noteButton(n, escapeHtml(n.name)));
   }
 }
 
@@ -785,7 +850,7 @@ function renderNoteList() {
       const slash = p.lastIndexOf('/');
       const name = escapeHtml(p.slice(slash + 1).replace(/\.md$/i, ''));
       const dir = slash >= 0 ? `<span class="dir">${escapeHtml(p.slice(0, slash))}</span>` : '';
-      box.append(noteButton(n, `<span>📄 ${name}</span>${dir}`));
+      box.append(noteButton(n, `<span>${name}</span>${dir}`));
     }
     tree.replaceChildren(box);
   } else {
@@ -835,9 +900,10 @@ async function openVault(handle, { quiet = false } = {}) {
     vault = { root: handle, notes: await listNotes(handle) };
     savedVault = null;
     await saveVaultHandle(handle);
-    $('#note-search').hidden = false;
+    $('#search-box').hidden = false;
     $('#btn-vault-reopen').hidden = true;
-    $('#btn-vault').textContent = '📁 Cambia vault';
+    $('#btn-vault').textContent = 'Cambia vault';
+    $('#btn-vault').className = 'btn-ghost small';
     const status = $('#vault-status');
     status.hidden = false;
     status.textContent = `✅ Collegato a «${handle.name}» · ${vault.notes.length} note`;
@@ -933,6 +999,15 @@ function readSettingsForm() {
 
 // ---------- Collegamento dei pulsanti ----------
 function init() {
+  initUi();
+  setLevelProvider(() => {
+    if (live) {
+      const l = live.levels?.();
+      return l ? (liveSpeaking ? l.output : l.input) : null;
+    }
+    return listener.active ? micMeter.level() : null;
+  });
+  setInterval(() => renderContext(contextData()), 15000);
   updateModeHelp();
   updateStatus();
 
@@ -969,13 +1044,6 @@ function init() {
     if (savedVault && !vault.root) await openVault(savedVault, { quiet: true });
     startLive();
   };
-  $('#btn-toggle-sessions').onclick = () => {
-    const hidden = document.body.classList.toggle('no-sessions');
-    try { localStorage.setItem('compagno.sessionsHidden', hidden ? '1' : '0'); } catch { /* ignora */ }
-  };
-  let sessionsHidden = window.innerWidth < 1100;
-  try { const v = localStorage.getItem('compagno.sessionsHidden'); if (v !== null && window.innerWidth >= 1100) sessionsHidden = v === '1'; } catch { /* ignora */ }
-  document.body.classList.toggle('no-sessions', sessionsHidden);
   renderSessions();
   window.addEventListener('beforeunload', () => { if (saveTimer) persistSession(); });
 

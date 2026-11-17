@@ -59,14 +59,23 @@ export class LiveSession {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
     });
     this.inCtx = new AudioContext({ sampleRate: 16000 });
-    await this.inCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611171143', import.meta.url));
+    await this.inCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611171215', import.meta.url));
     const src = this.inCtx.createMediaStreamSource(this.stream);
     this.node = new AudioWorkletNode(this.inCtx, 'pcm-capture');
     this.node.port.onmessage = (e) => this.#sendAudio(e.data);
     const mute = this.inCtx.createGain();
     mute.gain.value = 0;
     src.connect(this.node).connect(mute).connect(this.inCtx.destination);
+    // Misura del volume (solo per l'animazione del nucleo)
+    this.inAn = this.inCtx.createAnalyser();
+    this.inAn.fftSize = 512;
+    src.connect(this.inAn);
     this.outCtx = new AudioContext({ sampleRate: 24000 });
+    this.outGain = this.outCtx.createGain();
+    this.outAn = this.outCtx.createAnalyser();
+    this.outAn.fftSize = 512;
+    this.outGain.connect(this.outAn);
+    this.outAn.connect(this.outCtx.destination);
     this.#open();
   }
 
@@ -180,7 +189,7 @@ export class LiveSession {
     for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
     const src = ctx.createBufferSource();
     src.buffer = buf;
-    src.connect(ctx.destination);
+    src.connect(this.outGain || ctx.destination);
     this.nextTime = Math.max(this.nextTime, ctx.currentTime + 0.02);
     src.start(this.nextTime);
     this.nextTime += buf.duration;
@@ -199,6 +208,19 @@ export class LiveSession {
     this.sources.clear();
     this.nextTime = 0;
     this.o.onSpeaking?.(false);
+  }
+
+  /** Volume attuale (0..1) di microfono e voce del modello, per le animazioni. */
+  levels() {
+    const rms = (an) => {
+      if (!an) return 0;
+      if (!this._buf || this._buf.length !== an.fftSize) this._buf = new Float32Array(an.fftSize);
+      an.getFloatTimeDomainData(this._buf);
+      let sum = 0;
+      for (let i = 0; i < this._buf.length; i++) sum += this._buf[i] * this._buf[i];
+      return Math.sqrt(sum / this._buf.length);
+    };
+    return { input: rms(this.inAn), output: rms(this.outAn) };
   }
 
   /** Zittisce la risposta in corso (senza chiudere la chiamata). */
