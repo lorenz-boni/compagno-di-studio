@@ -15,10 +15,9 @@ Un compagno di corso **vocale** che ti ascolta mentre ripeti e ti corregge quand
 
 1. Apri la pagina dell'app in **Google Chrome**. Edge ha problemi noti col microfono in Italia.
 2. Crea una chiave gratuita su <https://aistudio.google.com/apikey> e incollala in ⚙️ Impostazioni.
-3. Scegli gli appunti:
-   - **📁 Apri vault Obsidian**: scegli la cartella del vault e poi clicca una nota. Obsidian non deve essere aperto.
-   - oppure **📄 Carica .md** / **📋 Incolla testo**.
-4. Premi **🎙️ Inizia a parlare** e racconta. Conviene usare le **cuffie**, così il microfono non sente la voce del compagno.
+3. Collega il vault **una volta sola**: clicca **📁 Collega vault Obsidian** e scegli la cartella *principale* del vault, cioè quella che contiene la cartella nascosta `.obsidian`. Nella finestra di Windows non vedrai le note, solo le cartelle: è normale. Entra nella cartella del vault e premi **Seleziona cartella**. Quando Chrome chiede il permesso, scegli **«Consenti a ogni visita»**: dalle volte successive il vault si collega da solo.
+4. Per scegliere l'argomento basta dirlo: *«apri Fluidodinamica 1, lezione 3»*. Il compagno cerca la nota, la apre e si parte. In alternativa clicca una nota dall'elenco, oppure usa **📄 Carica .md** / **📋 Incolla testo**.
+5. Premi **🎙️ Inizia a parlare** e racconta. Conviene usare le **cuffie**, così il microfono non sente la voce del compagno.
 
 ### Con Wispr Flow
 Metti il cursore nella casella di testo in basso e detta con la scorciatoia di Wispr Flow. Il testo dettato viene inviato da solo; l'opzione si può disattivare nelle impostazioni.

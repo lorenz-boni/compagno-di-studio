@@ -1,8 +1,8 @@
 import { streamChat, complete, listModels } from './gemini.js';
 import { Listener, speechSupported } from './speech.js';
 import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle } from './vault.js';
-import { buildSystem, FINISHED_PREFIX, START_QUIZ, summaryRequest } from './prompts.js';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js';
+import { buildSystem, FINISHED_PREFIX, START_QUIZ, summaryRequest, VAULT_TOOLS } from './prompts.js';
 
 const $ = (s) => document.querySelector(s);
 
@@ -30,6 +30,7 @@ function saveSettings() {
 let mode = 'racconto';
 let note = null; // { title, text, path? }
 let vault = { root: null, notes: [] };
+let savedVault = null; // vault ricordato ma non ancora ricollegato (serve un clic per il permesso)
 let history = []; // turni nel formato Gemini: { role, parts: [{ text }] }
 let controller = null; // risposta in corso
 let buffer = ''; // ciò che hai detto e non è ancora stato inviato
@@ -110,7 +111,7 @@ function flush({ finished = false } = {}) {
 // ---------- Conversazione ----------
 function addUserTurn(text) {
   const last = history[history.length - 1];
-  if (last?.role === 'user') last.parts[0].text += `\n${text}`;
+  if (last?.role === 'user') last.parts.push({ text });
   else history.push({ role: 'user', parts: [{ text }] });
 }
 
@@ -127,38 +128,66 @@ function sendUser(text, prefix = '', { hidden = false } = {}) {
   respond();
 }
 
+function vaultInfo() {
+  return vault.root ? { count: vault.notes.length, folders: folderOverview(vault.notes) } : null;
+}
+
 async function respond() {
   const ctrl = new AbortController();
   controller = ctrl;
   updateStatus();
   const bubble = addBubble('bot', '…');
   let full = '';
-  let pending = '';
+  let parts = [];
   try {
-    const stream = streamChat({
-      key: settings.key,
-      model: settings.model || DEFAULTS.model,
-      fast: settings.fast,
-      system: buildSystem({ mode, correction: settings.correction, note }),
-      contents: history,
-      signal: ctrl.signal,
-    });
-    for await (const chunk of stream) {
-      full += chunk;
-      pending += chunk;
-      const [ready, rest] = splitSentences(pending);
-      pending = rest;
-      ready.forEach((s) => speaker.say(s));
-      renderInto(bubble, full);
-      scrollLog();
+    // Il modello può usare gli strumenti del vault (cerca/apri nota) prima di rispondere: al massimo 4 passaggi.
+    for (let step = 0; step < 4; step++) {
+      parts = [];
+      let pending = '';
+      if (full && !/\s$/.test(full)) full += ' ';
+      const stream = streamChat({
+        key: settings.key,
+        model: settings.model || DEFAULTS.model,
+        fast: settings.fast,
+        system: buildSystem({ mode, correction: settings.correction, note, vault: vaultInfo() }),
+        contents: history,
+        tools: vault.root ? VAULT_TOOLS : undefined,
+        signal: ctrl.signal,
+      });
+      for await (const chunk of stream) {
+        parts.push(...chunk.parts);
+        if (!chunk.text) continue;
+        full += chunk.text;
+        pending += chunk.text;
+        const [ready, rest] = splitSentences(pending);
+        pending = rest;
+        ready.forEach((x) => speaker.say(x));
+        renderInto(bubble, full);
+        scrollLog();
+      }
+      splitSentences(pending, true)[0].forEach((x) => speaker.say(x));
+
+      const calls = parts.filter((p) => p.functionCall);
+      if (parts.length) history.push({ role: 'model', parts });
+      parts = [];
+      if (!calls.length) break;
+      const responses = [];
+      for (const c of calls) {
+        responses.push({ functionResponse: { name: c.functionCall.name, response: await runTool(c.functionCall) } });
+      }
+      history.push({ role: 'user', parts: responses });
+      $('#log').append(bubble); // la risposta va sotto ai messaggi "Cerco… / Appunti…"
     }
-    const [last] = splitSentences(pending, true);
-    last.forEach((s) => speaker.say(s));
   } catch (err) {
     if (err.name !== 'AbortError') addBubble('error', err.message || String(err));
   } finally {
+    // Risposta interrotta: teniamo il testo già detto, ma mai una chiamata a strumento rimasta senza risposta.
+    if (parts.some((p) => p.text) && !parts.some((p) => p.functionCall)) {
+      history.push({ role: 'model', parts: parts.filter((p) => p.text) });
+    }
+    const last = history[history.length - 1];
+    if (last?.role === 'model' && last.parts.some((p) => p.functionCall)) history.pop();
     if (full.trim()) {
-      history.push({ role: 'model', parts: [{ text: full }] });
       if (ctrl.signal.aborted) renderInto(bubble, `${full} …`);
     } else {
       bubble.remove();
@@ -166,6 +195,29 @@ async function respond() {
     if (controller === ctrl) controller = null;
     updateStatus();
   }
+}
+
+async function runTool({ name, args = {} }) {
+  if (!vault.root) return { errore: 'Nessun vault collegato.' };
+  if (name === 'cerca_note') {
+    const risultati = searchNotes(vault.notes, String(args.query || ''));
+    addBubble('info', `🔎 Cerco «${args.query}»: ${risultati.length ? `${risultati.length} risultati` : 'nessun risultato'}.`);
+    return risultati.length ? { risultati } : { risultati: [], cartelle_disponibili: folderOverview(vault.notes) };
+  }
+  if (name === 'apri_nota') {
+    const wanted = String(args.percorso || '');
+    const found = vault.notes.find((n) => n.path === wanted)
+      || vault.notes.find((n) => n.path.toLowerCase() === wanted.toLowerCase())
+      || vault.notes.find((n) => n.path === searchNotes(vault.notes, wanted, 1)[0]);
+    if (!found) return { errore: `Nota non trovata: ${wanted}. Usa prima cerca_note.` };
+    try {
+      await openNote(found);
+      return { aperta: found.path, caratteri: note.text.length, inizio: note.text.slice(0, 800) };
+    } catch (err) {
+      return { errore: `Impossibile leggere la nota: ${err.message}` };
+    }
+  }
+  return { errore: `Strumento sconosciuto: ${name}` };
 }
 
 function startQuizIfNeeded() {
@@ -235,8 +287,12 @@ function updateModeHelp() {
 }
 
 // ---------- Interfaccia: appunti ----------
-function setNote(n) {
+function setNote(n, { announce = true } = {}) {
   note = n;
+  try {
+    if (n?.path) localStorage.setItem('compagno.lastNote', n.path);
+    else localStorage.removeItem('compagno.lastNote');
+  } catch { /* ignora */ }
   const box = $('#current-note');
   box.hidden = !n;
   $('#notes-hint').hidden = Boolean(n);
@@ -247,7 +303,7 @@ function setNote(n) {
   document.querySelectorAll('#note-list button').forEach((b) => {
     b.setAttribute('aria-current', String(Boolean(n?.path) && b.dataset.path === n.path));
   });
-  if (history.length) addBubble('info', n ? `Ora gli appunti sono: «${n.title}».` : 'Appunti rimossi: il compagno userà la conoscenza generale.');
+  if (announce) addBubble('info', n ? `📂 Appunti: «${n.path || n.title}».` : 'Appunti rimossi.');
 }
 
 function renderNoteList() {
@@ -265,8 +321,7 @@ function renderNoteList() {
     b.setAttribute('aria-current', String(note?.path === n.path));
     b.onclick = async () => {
       try {
-        const text = await readNote(n.handle);
-        setNote({ title: n.path.split('/').pop().replace(/\.md$/i, ''), text, path: n.path });
+        await openNote(n);
       } catch (err) {
         addBubble('error', `Non riesco a leggere la nota: ${err.message}`);
       }
@@ -276,20 +331,59 @@ function renderNoteList() {
   }));
 }
 
-async function openVault(handle) {
+async function openNote(n, opts) {
+  const text = await readNote(n.handle);
+  setNote({ title: n.path.split('/').pop().replace(/\.md$/i, ''), text, path: n.path }, opts);
+}
+
+/** Collega il vault. `quiet`: all'avvio automatico, senza messaggi se va tutto bene. */
+async function openVault(handle, { quiet = false } = {}) {
   try {
     if (!(await ensurePermission(handle, 'readwrite'))) {
-      addBubble('error', 'Permesso sul vault negato.');
-      return;
+      addBubble('error', 'Permesso sul vault negato. Quando Chrome lo chiede, scegli «Consenti a ogni visita».');
+      return false;
     }
     vault = { root: handle, notes: await listNotes(handle) };
+    savedVault = null;
     await saveVaultHandle(handle);
     $('#note-search').hidden = false;
     $('#btn-vault-reopen').hidden = true;
+    $('#btn-vault').textContent = '📁 Cambia vault';
+    const status = $('#vault-status');
+    status.hidden = false;
+    status.textContent = `✅ Collegato a «${handle.name}» · ${vault.notes.length} note`;
     renderNoteList();
-    addBubble('info', `Vault «${handle.name}» aperto: ${vault.notes.length} note.`);
+    if (!vault.notes.length) {
+      addBubble('error', `Nella cartella «${handle.name}» non ho trovato note .md. Devi scegliere la cartella principale del vault (quella che contiene la cartella .obsidian), non una sottocartella di allegati.`);
+    } else if (!quiet) {
+      addBubble('info', `Vault «${handle.name}» collegato: ${vault.notes.length} note. Ora puoi dire, per esempio, «apri Fluidodinamica 1, lezione 3».`);
+    }
+    // Riapre l'ultima nota usata.
+    let last = null;
+    try { last = localStorage.getItem('compagno.lastNote'); } catch { /* ignora */ }
+    const n = last && !note && vault.notes.find((x) => x.path === last);
+    if (n) await openNote(n, { announce: !quiet });
+    return true;
   } catch (err) {
     if (err.name !== 'AbortError') addBubble('error', `Impossibile aprire il vault: ${err.message}`);
+    return false;
+  }
+}
+
+/** All'avvio: se Chrome ha già il permesso ("Consenti a ogni visita") il vault si collega da solo. */
+async function autoConnectVault() {
+  if (!vaultSupported) return;
+  const h = await loadVaultHandle();
+  if (!h) return;
+  let state = 'prompt';
+  try { state = await h.queryPermission({ mode: 'readwrite' }); } catch { /* ignora */ }
+  if (state === 'granted') {
+    await openVault(h, { quiet: true });
+  } else {
+    savedVault = h;
+    const b = $('#btn-vault-reopen');
+    b.hidden = false;
+    b.textContent = `↻ Ricollega «${h.name}»`;
   }
 }
 
@@ -355,16 +449,18 @@ function init() {
   });
 
   // Microfono
-  $('#btn-mic').onclick = () => {
+  $('#btn-mic').onclick = async () => {
     if (listener.active) {
       listener.stop();
       flush();
     } else {
+      if (savedVault && !vault.root) await openVault(savedVault, { quiet: true });
       listener.start();
       startQuizIfNeeded();
     }
   };
-  $('#btn-done').onclick = () => {
+  $('#btn-done').onclick = async () => {
+    if (savedVault && !vault.root) await openVault(savedVault, { quiet: true });
     if (!flush({ finished: true })) startQuizIfNeeded();
   };
   $('#btn-stop-voice').onclick = () => speaker.cancel();
@@ -373,7 +469,8 @@ function init() {
   // Testo / Wispr Flow
   const input = $('#text-input');
   let autoTimer = null;
-  const sendTyped = () => {
+  const sendTyped = async () => {
+    if (savedVault && !vault.root) await openVault(savedVault, { quiet: true });
     clearTimeout(autoTimer);
     const t = input.value.trim();
     if (!t) return;
@@ -400,10 +497,10 @@ function init() {
     try { await openVault(await pickVault()); } catch (err) { if (err.name !== 'AbortError') addBubble('error', err.message); }
   };
   $('#btn-vault-reopen').onclick = async () => {
-    const h = await loadVaultHandle();
+    const h = savedVault || (await loadVaultHandle());
     if (h) await openVault(h);
   };
-  loadVaultHandle().then((h) => { if (h && vaultSupported) { $('#btn-vault-reopen').hidden = false; $('#btn-vault-reopen').textContent = `↻ Riapri «${h.name}»`; } });
+  autoConnectVault();
   $('#note-search').oninput = renderNoteList;
   $('#file-input').onchange = async (e) => {
     const files = [...e.target.files];

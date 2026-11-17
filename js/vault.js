@@ -103,3 +103,64 @@ export async function loadVaultHandle() {
     return null;
   }
 }
+
+// --- Ricerca delle note per nome (es. "fluidodinamica 1 lezione tre") ---
+
+const NUMBERS = {
+  uno: 1, una: 1, primo: 1, prima: 1, due: 2, secondo: 2, seconda: 2, tre: 3, terzo: 3, terza: 3,
+  quattro: 4, quarto: 4, quarta: 4, cinque: 5, quinto: 5, quinta: 5, sei: 6, sesto: 6, sesta: 6,
+  sette: 7, settimo: 7, settima: 7, otto: 8, ottavo: 8, ottava: 8, nove: 9, nono: 9, nona: 9,
+  dieci: 10, decimo: 10, decima: 10, undici: 11, dodici: 12, tredici: 13, quattordici: 14,
+  quindici: 15, sedici: 16, diciassette: 17, diciotto: 18, diciannove: 19, venti: 20,
+  ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10,
+};
+const STOP = new Set([
+  'il', 'lo', 'la', 'le', 'gli', 'l', 'un', 'di', 'del', 'della', 'dello', 'dei', 'delle', 'degli',
+  'in', 'nel', 'nella', 'nei', 'nelle', 'e', 'a', 'al', 'alla', 'da', 'dal', 'dalla', 'su', 'sul',
+  'per', 'con', 'mi', 'me', 'ci', 'numero', 'num', 'n', 'nr', 'cerca', 'apri', 'trova', 'md',
+  'appunti', 'nota', 'note', 'file',
+]);
+
+function normalize(s) {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+export function tokens(s) {
+  return (normalize(s).match(/[a-z]+|\d+/g) || [])
+    .map((t) => (NUMBERS[t] !== undefined ? String(NUMBERS[t]) : t.replace(/^0+(?=\d)/, '')))
+    .filter((t) => !STOP.has(t));
+}
+
+/** Restituisce le note più simili alla richiesta, dalla più probabile. */
+export function searchNotes(notes, query, limit = 12) {
+  const q = [...new Set(tokens(query))];
+  if (!q.length) return [];
+  const scored = notes.map((n) => {
+    const all = tokens(n.path.replace(/\.md$/i, ''));
+    const name = tokens(n.path.split('/').pop().replace(/\.md$/i, ''));
+    let score = 0;
+    for (const t of q) {
+      const isNum = /^\d+$/.test(t);
+      if (name.includes(t)) score += isNum ? 4 : 3;
+      else if (all.includes(t)) score += isNum ? 2 : 2;
+      else if (!isNum && t.length >= 4 && all.some((w) => w.startsWith(t) || t.startsWith(w) && w.length >= 4)) score += 1;
+    }
+    return { path: n.path, score };
+  });
+  return scored
+    .filter((s) => s.score > 0)
+    .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path, 'it', { numeric: true }))
+    .slice(0, limit)
+    .map((s) => s.path);
+}
+
+/** Cartelle del vault (primi due livelli), per far capire al modello come è organizzato. */
+export function folderOverview(notes, max = 80) {
+  const set = new Set();
+  for (const n of notes) {
+    const parts = n.path.split('/').slice(0, -1);
+    if (parts[0]) set.add(parts[0]);
+    if (parts[1]) set.add(`${parts[0]}/${parts[1]}`);
+  }
+  return [...set].sort((a, b) => a.localeCompare(b, 'it', { numeric: true })).slice(0, max);
+}

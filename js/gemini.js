@@ -51,16 +51,19 @@ function post(model, key, body, signal) {
 }
 
 /**
- * Risposta in streaming: restituisce pezzi di testo man mano che arrivano.
+ * Risposta in streaming: per ogni pezzo restituisce { text, parts }.
+ * `text` è il testo da mostrare/leggere, `parts` sono le parti originali
+ * (testo, chiamate a strumenti, firme) da rimettere tali e quali nella cronologia.
  * `fast` disattiva il "ragionamento" del modello per ridurre l'attesa;
  * se il modello non lo supporta si riprova senza.
  */
-export async function* streamChat({ key, model, system, contents, fast = true, signal }) {
+export async function* streamChat({ key, model, system, contents, tools, fast = true, signal }) {
   const body = {
     systemInstruction: { parts: [{ text: system }] },
     contents,
     generationConfig: { temperature: 0.5 },
   };
+  if (tools) body.tools = tools;
   if (fast) body.generationConfig.thinkingConfig = { thinkingBudget: 0 };
 
   let res = await post(model, key, body, signal);
@@ -88,7 +91,7 @@ export async function* streamChat({ key, model, system, contents, fast = true, s
       try { json = JSON.parse(data); } catch { continue; }
       const parts = json?.candidates?.[0]?.content?.parts || [];
       const text = parts.filter((p) => !p.thought && p.text).map((p) => p.text).join('');
-      if (text) yield text;
+      if (parts.length) yield { text, parts };
     }
   }
 }
@@ -96,6 +99,6 @@ export async function* streamChat({ key, model, system, contents, fast = true, s
 /** Versione non in streaming: restituisce tutto il testo. */
 export async function complete(opts) {
   let out = '';
-  for await (const chunk of streamChat(opts)) out += chunk;
+  for await (const chunk of streamChat(opts)) out += chunk.text;
   return out;
 }

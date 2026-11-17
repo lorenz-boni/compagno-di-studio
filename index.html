@@ -23,8 +23,9 @@
     <aside class="notes">
       <h2>Appunti</h2>
       <div class="note-actions">
-        <button id="btn-vault">📁 Apri vault Obsidian</button>
-        <button id="btn-vault-reopen" class="ghost" hidden>↻ Riapri ultimo vault</button>
+        <button id="btn-vault">📁 Collega vault Obsidian</button>
+        <button id="btn-vault-reopen" hidden>↻ Ricollega vault</button>
+        <span id="vault-status" class="hint" hidden></span>
         <label class="button ghost">📄 Carica .md<input id="file-input" type="file" accept=".md,.markdown,.txt" multiple hidden></label>
         <button id="btn-paste" class="ghost">📋 Incolla testo</button>
       </div>
@@ -40,7 +41,7 @@
           <pre id="current-text"></pre>
         </details>
       </div>
-      <p class="hint" id="notes-hint">Scegli una nota da ripassare. Senza nota il compagno usa la sua conoscenza generale.</p>
+      <p class="hint" id="notes-hint">Collega il vault una volta sola: poi basta dire, per esempio, «apri Fluidodinamica 1, lezione 3». Puoi anche cliccare una nota dall'elenco.</p>
     </aside>
 
     <main class="chat">
@@ -89,14 +90,14 @@
         <label class="check"><input type="radio" name="correction" value="fine"> alla fine, quando premo "Ho finito"</label>
       </fieldset>
 
-      <label>Pausa che conta come "ho finito la frase": <output id="out-pause"></output> s
+      <label><span>Pausa che conta come "ho finito la frase": <output id="out-pause"></output> s</span>
         <input id="set-pause" type="range" min="1" max="6" step="0.5">
       </label>
 
       <label>Voce
         <select id="set-voice"></select>
       </label>
-      <label>Velocità voce: <output id="out-rate"></output>
+      <label><span>Velocità voce: <output id="out-rate"></output></span>
         <input id="set-rate" type="range" min="0.7" max="1.6" step="0.05">
       </label>
       <label class="check"><input id="set-mute" type="checkbox"> Solo testo (non leggere le risposte)</label>

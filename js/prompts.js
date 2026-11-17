@@ -33,7 +33,36 @@ Per iniziare, se l'utente non dice nulla di specifico, fai subito la prima doman
 Rispondi alle domande dell'utente e discutete l'argomento liberamente, sempre in modo breve (massimo 4 frasi) e parlato. Se l'utente dice qualcosa di sbagliato, correggilo.`,
 };
 
-export function buildSystem({ mode, correction, note }) {
+export const VAULT_TOOLS = [{
+  functionDeclarations: [
+    {
+      name: 'cerca_note',
+      description: 'Cerca note nel vault Obsidian dell\'utente in base al nome della nota e delle cartelle (materia, numero della lezione, argomento). Restituisce i percorsi più simili, dal più probabile.',
+      parameters: {
+        type: 'OBJECT',
+        properties: { query: { type: 'STRING', description: 'Parole chiave, per esempio "fluidodinamica 1 lezione 3" o "bernoulli".' } },
+        required: ['query'],
+      },
+    },
+    {
+      name: 'apri_nota',
+      description: 'Apre una nota del vault come appunti della sessione: da quel momento le correzioni si basano su di essa. Usa un percorso esatto restituito da cerca_note.',
+      parameters: {
+        type: 'OBJECT',
+        properties: { percorso: { type: 'STRING', description: 'Percorso della nota, es. "Fluidodinamica 1/Lezione 03.md".' } },
+        required: ['percorso'],
+      },
+    },
+  ],
+}];
+
+function vaultSection(vault) {
+  if (!vault) return '';
+  return `\n\nVAULT OBSIDIAN COLLEGATO: ${vault.count} note. Cartelle principali: ${vault.folders.join('; ') || '(nessuna)'}.
+Quando l'utente chiede di cercare, aprire o studiare una materia, una lezione o un argomento (es. "apri fluidodinamica 1, lezione 3"), usa SUBITO cerca_note e poi apri_nota, senza chiedere conferma se il risultato giusto è evidente. Se ci sono più risultati plausibili, leggi i nomi di 2 o 3 opzioni e chiedi quale. I numeri detti a voce corrispondono ai numeri nei nomi dei file ("lezione tre" = "Lezione 03"). Dopo aver aperto una nota, dì in una frase cosa hai aperto e invita l'utente a iniziare (in "Te lo racconto": a raccontare; in "Interrogami": fai la prima domanda).`;
+}
+
+export function buildSystem({ mode, correction, note, vault }) {
   const modeText = mode === 'racconto' ? MODES.racconto[correction === 'fine' ? 'fine' : 'subito'] : MODES[mode] || MODES.libera;
 
   let noteText;
@@ -42,9 +71,11 @@ export function buildSystem({ mode, correction, note }) {
     if (t.length > MAX_NOTE_CHARS) t = t.slice(0, MAX_NOTE_CHARS) + '\n[…nota troncata…]';
     noteText = `APPUNTI DELL'UTENTE (nota "${note.title}") — sono la fonte principale per le correzioni:\n<<<APPUNTI\n${t}\nAPPUNTI>>>`;
   } else {
-    noteText = `Non ci sono appunti caricati: usa la tua conoscenza generale e dillo quando correggi ("in generale…"). Se l'utente non ha detto di che argomento si tratta, chiediglielo.`;
+    noteText = vault
+      ? `Non è ancora aperta nessuna nota. Se l'utente non ha detto quale lezione o argomento studiare, chiediglielo brevemente e poi aprila dal vault.`
+      : `Non ci sono appunti caricati: usa la tua conoscenza generale e dillo quando correggi ("in generale…"). Se l'utente non ha detto di che argomento si tratta, chiediglielo.`;
   }
-  return `${BASE}\n\n${modeText}\n\n${noteText}`;
+  return `${BASE}\n\n${modeText}\n\n${noteText}${vaultSection(vault)}`;
 }
 
 export const FINISHED_PREFIX = '[L\'utente ha finito di raccontare. Ecco tutta la sua esposizione:]\n';
