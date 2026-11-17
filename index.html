@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=202611171503">
+  <link rel="stylesheet" href="styles.css?v=202611171513">
 </head>
 <body data-core="idle">
   <!-- Icone (stile lineare, disegnate qui: nessuna libreria esterna) -->
@@ -63,7 +63,7 @@
       </svg>
       <div class="brand-text">
         <span class="brand-name">JARVIS</span>
-        <span class="brand-sub">Compagno di studio <small id="app-version" class="version">v202611171503</small></span>
+        <span class="brand-sub">Compagno di studio <small id="app-version" class="version">v202611171513</small></span>
       </div>
     </div>
 
@@ -97,11 +97,11 @@
         <button class="icon-btn small panel-close" data-close="library" aria-label="Chiudi la libreria" title="Comprimi"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
       <div class="note-actions">
-        <button id="btn-vault" class="btn-primary small">Collega vault Obsidian</button>
+        <button id="btn-vault" class="btn-primary small" title="Un vault Obsidian o qualsiasi cartella con PDF, Word, Markdown o testo">Collega cartella appunti</button>
         <button id="btn-vault-reopen" class="btn-primary small" hidden>↻ Ricollega vault</button>
         <span id="vault-status" class="vault-status" hidden></span>
         <div class="import-row">
-          <label class="btn-ghost small"><svg class="ic"><use href="#i-upload"/></svg>Carica .md<input id="file-input" type="file" accept=".md,.markdown,.txt" multiple hidden></label>
+          <label class="btn-ghost small" title="PDF, Word (.docx), Markdown o testo"><svg class="ic"><use href="#i-upload"/></svg>Carica file<input id="file-input" type="file" accept=".md,.markdown,.txt,.pdf,.docx" multiple hidden></label>
           <button id="btn-paste" class="btn-ghost small"><svg class="ic"><use href="#i-clipboard"/></svg>Incolla testo</button>
         </div>
       </div>
@@ -121,7 +121,7 @@
           <pre id="current-text"></pre>
         </details>
       </div>
-      <p class="hint" id="notes-hint">Collega il vault una volta sola: poi basta dire, per esempio, «apri Fluidodinamica 1, lezione 3». Puoi anche cliccare una nota dall'elenco.</p>
+      <p class="hint" id="notes-hint">Collega una volta sola la cartella dei tuoi appunti: un vault Obsidian oppure una cartella qualsiasi con <strong>PDF, Word (.docx), Markdown o testo</strong>. Poi basta dire, per esempio, «apri Fluidodinamica 1, lezione 3».</p>
     </aside>
 
     <!-- JARVIS -->
@@ -241,6 +241,17 @@
   <dialog id="dlg-settings">
     <form method="dialog" class="dialog">
       <h2>Impostazioni</h2>
+      <fieldset>
+        <legend>Il tuo percorso di studi</legend>
+        <p class="hint">JARVIS lo usa per adattare livello, terminologia ed esempi. Tutto facoltativo, resta solo in questo browser.</p>
+        <label>Università <input id="set-university" placeholder="es. Politecnico di Milano" autocomplete="organization"></label>
+        <span class="row">
+          <label style="flex:2">Corso di laurea <input id="set-degree" placeholder="es. Ingegneria per l'ambiente e il territorio"></label>
+          <label style="flex:1">Anno <input id="set-year" placeholder="es. 2° anno magistrale"></label>
+        </span>
+        <label>Altro da sapere <textarea id="set-profile-notes" rows="2" placeholder="es. esame orale, il prof. chiede molte dimostrazioni; preferisco esempi pratici"></textarea></label>
+      </fieldset>
+
       <label>Chiave API Gemini (gratuita)
         <input id="set-key" type="password" autocomplete="off" placeholder="AIza…">
       </label>
@@ -356,6 +367,6 @@
       document.head.appendChild(l);
     });
   </script>
-  <script type="module" src="js/app.js?v=202611171503"></script>
+  <script type="module" src="js/app.js?v=202611171513"></script>
 </body>
 </html>

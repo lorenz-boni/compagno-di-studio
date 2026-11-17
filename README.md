@@ -48,6 +48,23 @@ Se avevi già un collegamento creato prima, eliminalo e reinstalla: Windows non 
 
 Le icone sono in `icons/`. I PNG si rigenerano dagli SVG con `node tools/make-icons.cjs`.
 
+## Appunti in PDF e Word (anche senza Obsidian)
+
+Con **Collega cartella appunti** puoi scegliere un vault Obsidian oppure **qualsiasi cartella**. L'app legge:
+- **Markdown** e **testo** (.md, .txt);
+- **PDF**: il testo viene estratto pagina per pagina con pdf.js di Mozilla;
+- **Word .docx**: titoli, paragrafi, elenchi e tabelle, con mammoth. Il vecchio formato .doc va prima salvato come .docx.
+
+Il testo viene estratto **nel browser**, senza caricare i file da nessuna parte.
+
+I **PDF scansionati** (immagini senza testo selezionabile) vengono trascritti da Gemini **una volta sola**. Il risultato resta salvato nel browser, quindi riaprendoli non si spende un'altra richiesta. Limite: 18 MB per file.
+
+I PDF e i Word non vengono mai modificati: *Facciamo il punto* salva il resoconto in una nota `<nome> - ripassi.md` accanto al file. Anche **Carica file** accetta PDF e Word.
+
+## Il tuo percorso di studi
+
+In ⚙️ Impostazioni → *Il tuo percorso di studi* puoi indicare università, corso di laurea, anno e note libere (es. "esame orale, il prof. chiede le dimostrazioni"). JARVIS li usa per adattare livello, terminologia ed esempi.
+
 ## Costi e privacy
 
 - **Gemini**: piano gratuito di Google AI Studio. In caso di errore 429 (quota finita) aspetta un minuto o cambia modello nelle impostazioni. Nel piano gratuito Google può usare i testi per migliorare i suoi servizi: non inserire dati sensibili.
@@ -75,7 +92,8 @@ Poi apri <http://localhost:8000>.
 - `js/gemini.js`: chiamate a Gemini in streaming.
 - `js/speech.js`: microfono, con il riconoscimento vocale del browser.
 - `js/tts.js`: voce, con la sintesi vocale del browser.
-- `js/vault.js`: lettura e scrittura del vault Obsidian.
+- `js/vault.js`: lettura e scrittura della cartella degli appunti.
+- `js/docs.js`: lettura di PDF e Word (librerie in `vendor/`, caricate solo quando servono).
 - `js/study.js`: annotatore dei progressi (argomento, concetti, errori) e memoria per JARVIS.
 - `js/ui.js`: interfaccia (pannelli, nucleo animato, onde, indicatore di connessione, contesto).
 - `tests/*.cjs`: prove automatiche con Playwright (Gemini, Gemini Live e microfono simulati). Si lanciano con `node tests/<nome>.cjs .`

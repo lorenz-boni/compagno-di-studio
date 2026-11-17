@@ -702,3 +702,7 @@ dialog:has(.wide) { width: min(780px, calc(100vw - 32px)); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+.badge { display: inline-block; margin-left: 0.35rem; padding: 0 0.35em; border-radius: 5px; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; vertical-align: 0.12em; border: 1px solid currentColor; opacity: 0.8; }
+.badge-pdf { color: #FF8A8A; }
+.badge-docx { color: #7DB3FF; }
+.badge-txt { color: var(--muted); }

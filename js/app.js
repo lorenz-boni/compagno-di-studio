@@ -1,13 +1,15 @@
-import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171503';
-import { Listener, speechSupported } from './speech.js?v=202611171503';
-import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171503';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171503';
-import { buildSystem, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171503';
+import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171513';
+import { Listener, speechSupported } from './speech.js?v=202611171513';
+import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171513';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, readNoteFull, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171513';
+import { buildSystem, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171513';
 
-import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171503';
-import { LiveSession, pickLiveModels, LIVE_VOICES } from './live.js?v=202611171503';
-import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611171503';
-import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611171503';
+import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171513';
+import { LiveSession, pickLiveModels, LIVE_VOICES } from './live.js?v=202611171513';
+import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611171513';
+import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611171513';
+import { stripExt, isMarkdown, kindOf, extractText, fileToBase64, OCR_PROMPT, ACCEPT } from './docs.js?v=202611171513';
+import { dbGet, dbPut } from './db.js?v=202611171513';
 
 const $ = (s) => document.querySelector(s);
 
@@ -24,6 +26,7 @@ const DEFAULTS = {
   liveVoice: 'Kore',
   liveModels: [], // modelli Live disponibili per la chiave
   annotate: true, // registra argomento, concetti ed errori dopo ogni risposta
+  profile: { university: '', degree: '', year: '', notes: '' }, // percorso di studi, per dare contesto a JARVIS
   rate: 1.05,
   mute: false,
   autosend: true,
@@ -202,7 +205,7 @@ async function respond() {
         key: settings.key,
         model: settings.model || DEFAULTS.model,
         fast: settings.fast,
-        system: buildSystem({ mode, correction: settings.correction, note, vault: vaultInfo(), memory: studyMemory() }),
+        system: buildSystem({ mode, correction: settings.correction, note, vault: vaultInfo(), memory: studyMemory(), profile: settings.profile }),
         contents: modelHistory(),
         tools: vault.root ? VAULT_TOOLS : undefined,
         signal: ctrl.signal,
@@ -427,7 +430,7 @@ async function connectLive(i) {
     key: settings.key,
     model,
     voice: settings.liveVoice,
-    system: buildSystem({ mode, correction: settings.correction, note, vault: vaultInfo(), memory: studyMemory() }) + LIVE_EXTRA,
+    system: buildSystem({ mode, correction: settings.correction, note, vault: vaultInfo(), memory: studyMemory(), profile: settings.profile }) + LIVE_EXTRA,
     tools: vault.root ? VAULT_TOOLS : undefined,
     seed: liveSeed(),
     kickoff,
@@ -866,7 +869,7 @@ function buildTree(notes) {
       node = node.folders.get(p);
       node.count++;
     }
-    node.notes.push({ ...n, name: file.replace(/\.md$/i, '') });
+    node.notes.push({ ...n, name: stripExt(file), kind: kindOf(file) });
   }
   return root;
 }
@@ -910,7 +913,7 @@ function renderFolder(node, container) {
     container.append(det);
   }
   for (const n of [...node.notes].sort((a, b) => byName(a.name, b.name))) {
-    container.append(noteButton(n, escapeHtml(n.name)));
+    container.append(noteButton(n, `${escapeHtml(n.name)}${badge(n.kind)}`));
   }
 }
 
@@ -928,7 +931,7 @@ function renderNoteList() {
     for (const p of paths) {
       const n = vault.notes.find((x) => x.path === p);
       const slash = p.lastIndexOf('/');
-      const name = escapeHtml(p.slice(slash + 1).replace(/\.md$/i, ''));
+      const name = escapeHtml(stripExt(p.slice(slash + 1))) + badge(kindOf(p));
       const dir = slash >= 0 ? `<span class="dir">${escapeHtml(p.slice(0, slash))}</span>` : '';
       box.append(noteButton(n, `<span>${name}</span>${dir}`));
     }
@@ -964,9 +967,50 @@ function highlightCurrent({ reveal = false } = {}) {
   });
 }
 
+function badge(kind) {
+  return kind && kind !== 'md' ? ` <span class="badge badge-${kind}">${kind.toUpperCase()}</span>` : '';
+}
+
+/** Testo di un appunto; per i PDF scansionati (senza testo) lo fa trascrivere a Gemini una volta sola. */
+async function noteText(r, label) {
+  if (!r.scanned) return r.text;
+  const f = r.file;
+  const cacheKey = `ocr:${label}:${f.size}:${f.lastModified}`;
+  const cached = await dbGet('kv', cacheKey).catch(() => null);
+  if (cached) return cached;
+  if (!settings.key) {
+    addBubble('error', `«${label}» è un PDF scansionato (senza testo selezionabile): per leggerlo serve la chiave Gemini nelle impostazioni.`);
+    return r.text;
+  }
+  if (f.size > 18 * 1024 * 1024) {
+    addBubble('error', `«${label}» è un PDF scansionato troppo grande per la trascrizione (${Math.round(f.size / 1048576)} MB, massimo 18). Dividilo in parti più piccole.`);
+    return r.text;
+  }
+  const info = addBubble('info', `📄 «${label}» è una scansione senza testo: la faccio trascrivere a Gemini (solo la prima volta, poi resta salvata)…`, { transient: true });
+  try {
+    const text = await complete({
+      key: settings.key,
+      model: settings.model || DEFAULTS.model,
+      system: 'Sei un trascrittore preciso di appunti universitari.',
+      contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'application/pdf', data: await fileToBase64(f) } }, { text: OCR_PROMPT }] }],
+      fast: true,
+      timeoutMs: 90000,
+    });
+    if (text.trim()) {
+      await dbPut('kv', text, cacheKey).catch(() => {});
+      renderInto(info, `📄 Trascrizione di «${label}» pronta.`);
+      return text;
+    }
+  } catch (err) {
+    addBubble('error', `Trascrizione di «${label}» non riuscita: ${err.message}`);
+  }
+  return r.text;
+}
+
 async function openNote(n, opts) {
-  const text = await readNote(n.handle);
-  setNote({ title: n.path.split('/').pop().replace(/\.md$/i, ''), text, path: n.path }, opts);
+  const r = await readNoteFull(n.handle);
+  const text = await noteText(r, n.path);
+  setNote({ title: stripExt(n.path.split('/').pop()), text, path: n.path, kind: r.kind }, opts);
   highlightCurrent({ reveal: true });
 }
 
@@ -982,7 +1026,7 @@ async function openVault(handle, { quiet = false } = {}) {
     await saveVaultHandle(handle);
     $('#search-box').hidden = false;
     $('#btn-vault-reopen').hidden = true;
-    $('#btn-vault').textContent = 'Cambia vault';
+    $('#btn-vault').textContent = 'Cambia cartella';
     $('#btn-vault').className = 'btn-ghost small';
     const status = $('#vault-status');
     status.hidden = false;
@@ -990,9 +1034,9 @@ async function openVault(handle, { quiet = false } = {}) {
     renderNoteList();
     importFromVault(handle).then((n) => { if (n) renderSessions(); });
     if (!vault.notes.length) {
-      addBubble('error', `Nella cartella «${handle.name}» non ho trovato note .md. Devi scegliere la cartella principale del vault (quella che contiene la cartella .obsidian), non una sottocartella di allegati.`);
+      addBubble('error', `Nella cartella «${handle.name}» non ho trovato appunti (Markdown, PDF, Word .docx o testo). Scegli la cartella che contiene i tuoi appunti, non una sottocartella di sole immagini.`);
     } else if (!quiet) {
-      addBubble('info', `Vault «${handle.name}» collegato: ${vault.notes.length} note. Ora puoi dire, per esempio, «apri Fluidodinamica 1, lezione 3».`, { transient: true });
+      addBubble('info', `Cartella «${handle.name}» collegata: ${vault.notes.length} appunti. Ora puoi dire, per esempio, «apri Fluidodinamica 1, lezione 3».`, { transient: true });
     }
     // Riapre l'ultima nota usata.
     let last = null;
@@ -1043,6 +1087,11 @@ function fillLiveModels() {
 
 function openSettings() {
   $('#set-annotate').checked = settings.annotate !== false;
+  const pr = settings.profile || {};
+  $('#set-university').value = pr.university || '';
+  $('#set-degree').value = pr.degree || '';
+  $('#set-year').value = pr.year || '';
+  $('#set-profile-notes').value = pr.notes || '';
   fillLiveModels();
   $('#set-live-voice').replaceChildren(...LIVE_VOICES.map((v) => new Option(v, v)));
   $('#set-live-voice').value = settings.liveVoice || 'Kore';
@@ -1072,6 +1121,12 @@ function readSettingsForm() {
   settings.autosend = $('#set-autosend').checked;
   settings.liveModel = $('#set-live-model').value;
   settings.annotate = $('#set-annotate').checked;
+  settings.profile = {
+    university: $('#set-university').value.trim(),
+    degree: $('#set-degree').value.trim(),
+    year: $('#set-year').value.trim(),
+    notes: $('#set-profile-notes').value.trim(),
+  };
   refreshStudy(true);
   settings.liveVoice = $('#set-live-voice').value || 'Kore';
   saveSettings();
@@ -1181,8 +1236,16 @@ function init() {
   $('#file-input').onchange = async (e) => {
     const files = [...e.target.files];
     if (!files.length) return;
-    const texts = await Promise.all(files.map((f) => f.text()));
-    const titles = files.map((f) => f.name.replace(/\.(md|markdown|txt)$/i, ''));
+    const texts = [];
+    for (const f of files) {
+      try {
+        texts.push(await noteText({ ...(await extractText(f)), file: f }, f.name));
+      } catch (err) {
+        addBubble('error', `Non riesco a leggere «${f.name}»: ${err.message}`);
+        texts.push('');
+      }
+    }
+    const titles = files.map((f) => stripExt(f.name));
     const text = files.length === 1 ? texts[0] : texts.map((t, i) => `# ${titles[i]}\n\n${t}`).join('\n\n');
     setNote({ title: titles.join(' + '), text });
     e.target.value = '';
@@ -1294,7 +1357,7 @@ function init() {
   $('#btn-save-summary').onclick = saveSummary;
 
   if (!settings.key) {
-    addBubble('info', 'Benvenuto! Per iniziare incolla la tua chiave gratuita di Gemini nelle impostazioni.', { transient: true });
+    addBubble('info', 'Benvenuto! Nelle impostazioni indica università e corso (così JARVIS sa a che livello parlarti) e incolla la tua chiave gratuita di Gemini.', { transient: true });
     openSettings();
   }
 }
@@ -1309,7 +1372,7 @@ async function makeSummary() {
   speaker.cancel();
   const btn = $('#btn-summary');
   btn.disabled = true;
-  btn.textContent = '📝 Sto scrivendo…';
+  btn.querySelector('.lbl').textContent = 'Sto scrivendo…';
   try {
     const date = new Date().toLocaleDateString('sv-SE'); // AAAA-MM-GG
     const text = await complete({
@@ -1317,37 +1380,52 @@ async function makeSummary() {
       model: settings.model || DEFAULTS.model,
       fast: false,
       timeoutMs: 40000,
-      system: buildSystem({ mode, correction: settings.correction, note }),
+      system: buildSystem({ mode, correction: settings.correction, note, profile: settings.profile }),
       contents: [...modelHistory(60), { role: 'user', parts: [{ text: summaryRequest(date) }] }],
     });
     $('#summary-text').value = text.trim();
     $('#btn-copy-summary').textContent = '📋 Copia';
-    const canSave = Boolean(note?.path && vault.root);
+    const target = summaryTarget();
     const save = $('#btn-save-summary');
-    save.disabled = !canSave;
-    save.textContent = '💾 Aggiungi alla nota';
-    $('#summary-target').textContent = canSave
-      ? `Verrà aggiunto in fondo a «${note.path}». Prima viene salvata una copia in .compagno/backup/ nel vault.`
-      : 'Per salvarlo direttamente apri la nota dal vault Obsidian; altrimenti copialo e incollalo tu.';
+    save.disabled = !target;
+    save.textContent = target && target !== note.path ? '💾 Salva nella nota dei ripassi' : '💾 Aggiungi alla nota';
+    $('#summary-target').textContent = !target
+      ? 'Per salvarlo direttamente apri gli appunti dalla cartella collegata; altrimenti copialo e incollalo tu.'
+      : target === note.path
+        ? `Verrà aggiunto in fondo a «${note.path}». Prima viene salvata una copia in .compagno/backup/.`
+        : `I PDF e i file Word non si modificano: il resoconto va in «${target}», accanto agli appunti (la crea se non c'è).`;
     $('#dlg-summary').showModal();
   } catch (err) {
     addBubble('error', err.message || String(err));
   } finally {
     btn.disabled = false;
-    btn.textContent = '📝 Facciamo il punto';
+    btn.querySelector('.lbl').textContent = 'Facciamo il punto';
   }
+}
+
+/** Dove salvare il resoconto: la nota stessa se è Markdown, altrimenti «<nome> - ripassi.md» accanto. */
+function summaryTarget() {
+  if (!note?.path || !vault.root) return '';
+  if (isMarkdown(note.path)) return note.path;
+  return `${stripExt(note.path)} - ripassi.md`;
 }
 
 async function saveSummary() {
   const btn = $('#btn-save-summary');
   try {
-    const backup = await appendToNote(vault.root, note.path, $('#summary-text').value);
-    const fresh = vault.notes.find((n) => n.path === note.path);
-    if (fresh) note.text = await readNote(fresh.handle);
-    $('#current-text').textContent = note.text;
+    const target = summaryTarget();
+    const backup = await appendToNote(vault.root, target, $('#summary-text').value);
+    if (target === note.path) {
+      const fresh = vault.notes.find((n) => n.path === note.path);
+      if (fresh) note.text = await readNote(fresh.handle);
+      $('#current-text').textContent = note.text;
+    } else if (!vault.notes.some((n) => n.path === target)) {
+      vault.notes = await listNotes(vault.root);
+      renderNoteList();
+    }
     btn.textContent = 'Salvato ✓';
     btn.disabled = true;
-    addBubble('info', `Resoconto aggiunto a «${note.path}». Copia di sicurezza: ${backup}`);
+    addBubble('info', `Resoconto salvato in «${target}».${backup ? ` Copia di sicurezza: ${backup}` : ''}`);
     touchSession();
   } catch (err) {
     addBubble('error', `Salvataggio non riuscito: ${err.message}`);

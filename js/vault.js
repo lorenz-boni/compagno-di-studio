@@ -1,4 +1,5 @@
-import { dbGet, dbPut } from './db.js?v=202611171503';
+import { isSupported, stripExt, extractText } from './docs.js?v=202611171513';
+import { dbGet, dbPut } from './db.js?v=202611171513';
 
 // Accesso diretto alla cartella del vault Obsidian con la File System Access API (Chrome/Edge su PC).
 
@@ -16,7 +17,7 @@ export async function ensurePermission(handle, mode = 'read') {
   return (await handle.requestPermission(opts)) === 'granted';
 }
 
-/** Elenca ricorsivamente tutte le note .md del vault. */
+/** Elenca ricorsivamente tutti gli appunti del vault o della cartella: Markdown, testo, PDF e Word (.docx). */
 export async function listNotes(dir, prefix = '') {
   const out = [];
   for await (const [name, handle] of dir.entries()) {
@@ -24,7 +25,7 @@ export async function listNotes(dir, prefix = '') {
     if (handle.kind === 'directory') {
       if (SKIP_DIRS.has(name)) continue;
       out.push(...(await listNotes(handle, `${prefix}${name}/`)));
-    } else if (name.toLowerCase().endsWith('.md')) {
+    } else if (isSupported(name) && !name.startsWith('~$')) { // ~$… = file temporanei di Word
       out.push({ path: `${prefix}${name}`, handle });
     }
   }
@@ -32,8 +33,13 @@ export async function listNotes(dir, prefix = '') {
 }
 
 export async function readNote(fileHandle) {
+  return (await readNoteFull(fileHandle)).text;
+}
+
+/** Testo dell'appunto più informazioni sul formato: { text, kind, scanned, file }. */
+export async function readNoteFull(fileHandle) {
   const file = await fileHandle.getFile();
-  return file.text();
+  return { ...(await extractText(file)), file };
 }
 
 async function getDir(root, parts, create) {
@@ -60,19 +66,24 @@ export async function appendToNote(root, path, addition) {
   const parts = path.split('/');
   const name = parts.pop();
   const dir = await getDir(root, parts, false);
-  const fh = await dir.getFileHandle(name);
+  // Se la nota non esiste ancora (es. «… - ripassi.md» accanto a un PDF) viene creata.
+  const fh = await dir.getFileHandle(name, { create: true });
   const current = await (await fh.getFile()).text();
 
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const backupName = `${path.replace(/\//g, '__').replace(/\.md$/i, '')}__${stamp}.md`;
-  const backupDir = await getDir(root, ['.compagno', 'backup'], true);
-  await writeFile(backupDir, backupName, current);
+  let backup = '';
+  if (current) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupName = `${path.replace(/\//g, '__').replace(/\.md$/i, '')}__${stamp}.md`;
+    const backupDir = await getDir(root, ['.compagno', 'backup'], true);
+    await writeFile(backupDir, backupName, current);
+    backup = `.compagno/backup/${backupName}`;
+  }
 
-  const sep = current.endsWith('\n') ? '\n' : '\n\n';
+  const sep = !current ? '' : current.endsWith('\n') ? '\n' : '\n\n';
   const w = await fh.createWritable();
   await w.write(current + sep + addition.trim() + '\n');
   await w.close();
-  return `.compagno/backup/${backupName}`;
+  return backup;
 }
 
 // --- Ricordare l'ultimo vault aperto (IndexedDB, solo in questo browser) ---
@@ -120,8 +131,8 @@ export function searchNotes(notes, query, limit = 12, { requireAll = false, with
   const q = [...new Set(tokens(query))];
   if (!q.length) return [];
   const scored = notes.map((n) => {
-    const all = tokens(n.path.replace(/\.md$/i, ''));
-    const name = tokens(n.path.split('/').pop().replace(/\.md$/i, ''));
+    const all = tokens(stripExt(n.path));
+    const name = tokens(stripExt(n.path.split('/').pop()));
     let score = 0;
     let matched = 0;
     const minPrefix = requireAll ? 2 : 4;
