@@ -1,13 +1,13 @@
-import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171242';
-import { Listener, speechSupported } from './speech.js?v=202611171242';
-import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171242';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171242';
-import { buildSystem, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171242';
+import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171503';
+import { Listener, speechSupported } from './speech.js?v=202611171503';
+import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171503';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171503';
+import { buildSystem, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171503';
 
-import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171242';
-import { LiveSession, pickLiveModels, LIVE_VOICES } from './live.js?v=202611171242';
-import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611171242';
-import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611171242';
+import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171503';
+import { LiveSession, pickLiveModels, LIVE_VOICES } from './live.js?v=202611171503';
+import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611171503';
+import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611171503';
 
 const $ = (s) => document.querySelector(s);
 

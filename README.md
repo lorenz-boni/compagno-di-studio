@@ -36,6 +36,18 @@ Metti il cursore nella casella di testo in basso e detta con la scorciatoia di W
 
 Wispr Flow è più preciso coi termini tecnici. Il piano gratuito però ha un limite di parole a settimana (circa 2.000 su PC), quindi conviene usarlo per i pezzi difficili e il microfono di Chrome per il resto.
 
+## Installarla come app (icona sul desktop)
+
+L'app è installabile: si apre in una finestra sua, con l'icona di JARVIS sul desktop, nella barra delle applicazioni e nel menu Start.
+
+1. Apri l'app in Chrome.
+2. Clicca l'icona di installazione (un monitor con una freccia) a destra nella barra degli indirizzi, oppure apri il menu ⋮ → *Trasmetti, salva e condividi* → *Installa pagina come app…*
+3. Conferma e lascia attivo *Crea collegamento sul desktop*.
+
+Se avevi già un collegamento creato prima, eliminalo e reinstalla: Windows non aggiorna da solo l'icona delle scorciatoie vecchie.
+
+Le icone sono in `icons/`. I PNG si rigenerano dagli SVG con `node tools/make-icons.cjs`.
+
 ## Costi e privacy
 
 - **Gemini**: piano gratuito di Google AI Studio. In caso di errore 429 (quota finita) aspetta un minuto o cambia modello nelle impostazioni. Nel piano gratuito Google può usare i testi per migliorare i suoi servizi: non inserire dati sensibili.
