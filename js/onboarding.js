@@ -4,7 +4,7 @@
 const $ = (s) => document.querySelector(s);
 
 export function createOnboarding(deps) {
-  // deps: { settings(), save(patch), verifyKey(key) → { ok, message, liveModels }, previewVoice(voice, key) → Promise,
+  // deps: { settings(), save(patch), verifyKey(key) → { ok, message }, mountVoices(root, select),
   //         pickFolder() → Promise<string|null>, tones, voices, onFinish() }
   const dlg = $('#dlg-welcome');
   let step = 1;
@@ -29,9 +29,7 @@ export function createOnboarding(deps) {
       l.querySelector('input').checked = (s.tone || 'confidenziale') === id;
       tones.append(l);
     }
-    const sel = $('#wz-voice');
-    sel.replaceChildren(...deps.voices.map((v) => new Option(`${v.name} — ${v.desc}`, v.name)));
-    sel.value = s.liveVoice || deps.voices[0].name;
+    deps.mountVoices($('#wz-voice-picker'), $('#wz-voice'));
     $('#wz-folder-status').textContent = deps.folderName?.() ? `Collegata: «${deps.folderName()}»` : '';
   }
 
@@ -90,26 +88,6 @@ export function createOnboarding(deps) {
     st.textContent = r.message;
     st.className = `hint ${r.ok ? 'ok-text' : 'err-text'}`;
     if (r.ok) deps.save({ key });
-  };
-
-  $('#wz-listen').onclick = async () => {
-    const st = $('#wz-voice-status');
-    const key = $('#wz-key').value.trim() || deps.settings().key;
-    if (!key) { st.textContent = 'Per ascoltare le voci serve la chiave (passo 2).'; st.className = 'hint err-text'; return; }
-    deps.save(collect());
-    const btn = $('#wz-listen');
-    btn.disabled = true;
-    st.className = 'hint';
-    st.textContent = 'Ascolta…';
-    try {
-      await deps.previewVoice($('#wz-voice').value, key);
-      st.textContent = 'Ti piace? Puoi provarne altre o andare avanti.';
-    } catch (err) {
-      st.textContent = `Anteprima non riuscita: ${err.message}`;
-      st.className = 'hint err-text';
-    } finally {
-      btn.disabled = false;
-    }
   };
 
   $('#wz-folder').onclick = async () => {

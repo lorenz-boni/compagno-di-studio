@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=202611171525">
+  <link rel="stylesheet" href="styles.css?v=202611171533">
 </head>
 <body data-core="idle">
   <!-- Icone (stile lineare, disegnate qui: nessuna libreria esterna) -->
@@ -63,7 +63,7 @@
       </svg>
       <div class="brand-text">
         <span class="brand-name">JARVIS</span>
-        <span class="brand-sub">Compagno di studio <small id="app-version" class="version">v202611171525</small></span>
+        <span class="brand-sub">Compagno di studio <small id="app-version" class="version">v202611171533</small></span>
       </div>
     </div>
 
@@ -283,13 +283,10 @@
       <section class="wiz-pane" data-step="3" hidden>
         <h3>Come vuoi che ti parli?</h3>
         <fieldset class="tone-pick" id="wz-tones"><legend>Tono</legend></fieldset>
-        <label>Voce di JARVIS
-          <span class="row">
-            <select id="wz-voice"></select>
-            <button type="button" id="wz-listen" class="btn-ghost small">▶ Ascolta</button>
-          </span>
-        </label>
-        <span class="hint" id="wz-voice-status">La voce naturale è quella di «Parla con JARVIS». Il microfono classico usa la voce di Chrome, più meccanica.</span>
+        <div class="field-label">Voce di JARVIS <span class="hint">— tocca ▶ per ascoltarla, poi scegli la scheda che ti piace</span></div>
+        <select id="wz-voice" hidden aria-hidden="true"></select>
+        <div id="wz-voice-picker" class="voice-picker"></div>
+        <span class="hint" id="wz-voice-status">Sono le voci di «Parla con JARVIS». Il microfono classico usa la voce di Chrome, più meccanica.</span>
       </section>
 
       <section class="wiz-pane" data-step="4" hidden>
@@ -364,13 +361,9 @@
         <label>Modello Live
           <select id="set-live-model"></select>
         </label>
-        <label>Voce dal vivo
-          <span class="row">
-            <select id="set-live-voice"></select>
-            <button type="button" id="btn-preview-voice" class="btn-ghost small">▶ Ascolta</button>
-          </span>
-        </label>
-        <span class="hint" id="preview-status"></span>
+        <div class="field-label">Voce dal vivo</div>
+        <select id="set-live-voice" hidden aria-hidden="true"></select>
+        <div id="set-voice-picker" class="voice-picker"></div>
         <p class="hint">L'elenco dei modelli si aggiorna con «Prova velocità modelli».</p>
       </fieldset>
 
@@ -448,6 +441,6 @@
       document.head.appendChild(l);
     });
   </script>
-  <script type="module" src="js/app.js?v=202611171525"></script>
+  <script type="module" src="js/app.js?v=202611171533"></script>
 </body>
 </html>

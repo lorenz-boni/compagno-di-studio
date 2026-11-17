@@ -16,6 +16,7 @@ const serve = require('./_server.cjs');
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ models: [
         { name: 'models/gemini-flash-lite-latest', supportedGenerationMethods: ['generateContent'] },
         { name: 'models/gemini-2.5-flash-native-audio-latest', supportedGenerationMethods: ['bidiGenerateContent'] },
+        { name: 'models/gemini-3.1-flash-live-preview', supportedGenerationMethods: ['bidiGenerateContent'] },
       ] }) });
     }
     const body = JSON.parse(route.request().postData());
@@ -30,7 +31,13 @@ const serve = require('./_server.cjs');
     const send = (o) => ws.send(Buffer.from(JSON.stringify(o)));
     ws.onMessage((raw) => {
       const m = JSON.parse(raw.toString());
-      if (m.setup) { previews.push(m.setup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName); send({ setupComplete: {} }); }
+      if (m.setup) {
+        const v = m.setup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName;
+        previews.push(`${v}@${m.setup.model.replace('models/', '')}`);
+        // il primo modello non accetta questa voce: l'app deve provare il successivo
+        if (v === 'Vindemiatrix' && m.setup.model.includes('native-audio')) { ws.close({ code: 1007, reason: 'Invalid voice name for this model' }); return; }
+        send({ setupComplete: {} });
+      }
       if (m.clientContent) {
         send({ serverContent: { modelTurn: { parts: [{ inlineData: { mimeType: 'audio/pcm;rate=24000', data: Buffer.alloc(4800).toString('base64') } }] } } });
         send({ serverContent: { turnComplete: true } });
@@ -58,12 +65,23 @@ const serve = require('./_server.cjs');
   await page.click('#wz-next');
   // 3. Tono e voce
   ok(await page.isChecked('input[name="wz-tone"][value="confidenziale"]'), 'tono predefinito: confidenziale');
-  ok((await page.inputValue('#wz-voice')) === 'Achird', 'voce predefinita: Achird (amichevole)');
-  ok((await page.$$eval('#wz-voice option', (o) => o.length)) === 30, '30 voci tra cui scegliere');
-  await page.selectOption('#wz-voice', 'Sulafat');
-  await page.click('#wz-listen');
-  await page.waitForFunction(() => document.querySelector('#wz-voice-status').textContent.includes('Ti piace'), null, { timeout: 10000 });
-  ok(previews.includes('Sulafat'), `anteprima con la voce scelta (${previews.join(', ')})`);
+  ok((await page.$eval('#wz-voice-picker .vp-card.sel .vp-name', (e) => e.textContent)) === 'Il compagno di corso', 'voce predefinita: «Il compagno di corso» (Achird)');
+  const cards = await page.$$eval('#wz-voice-picker .vp-card .vp-name', (e) => e.map((x) => x.textContent));
+  ok(cards.length === 8, `8 voci selezionate: ${cards.join(' · ')}`);
+  const play = async (label) => {
+    await page.click(`#wz-voice-picker .vp-card:has-text("${label}") .vp-play`);
+    await page.waitForFunction((l) => [...document.querySelectorAll('#wz-voice-picker .vp-card')].some((c) => c.textContent.includes(l) && !c.textContent.includes('ascolta…')), label, { timeout: 15000 });
+  };
+  await play('La voce calda');
+  ok(previews.includes('Sulafat@gemini-2.5-flash-native-audio-latest') && (await page.textContent('#wz-voice-picker .vp-card:has-text("La voce calda")')).includes('ascoltata'), `anteprima della voce calda (${previews.join(', ')})`);
+  ok((await page.inputValue('#wz-voice')) === 'Sulafat', 'ascoltandola, la voce viene anche scelta');
+  const before = previews.length;
+  await play('La voce calda');
+  ok(previews.length === before, 'riascoltata dalla memoria, senza nuove richieste');
+  await play('La tutor paziente');
+  ok(previews.join(',').includes('Vindemiatrix@gemini-3.1-flash-live-preview') && (await page.textContent('#wz-voice-picker .vp-card:has-text("La tutor paziente")')).includes('ascoltata'), 'voce rifiutata dal primo modello: suona con quello successivo');
+  ok(await page.evaluate(() => JSON.parse(localStorage.getItem('compagno.settings')).voiceSupport.Vindemiatrix.ok) === 'gemini-3.1-flash-live-preview', "l'app ricorda con quale modello funziona");
+  await page.click('#wz-voice-picker .vp-card:has-text("La voce calda") .vp-choose');
   await page.screenshot({ path: `${process.argv[3] || '.'}/onboarding-3.png` });
   await page.click('#wz-next');
   // 4. Appunti: saltato

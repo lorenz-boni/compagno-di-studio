@@ -1,16 +1,17 @@
-import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171525';
-import { Listener, speechSupported } from './speech.js?v=202611171525';
-import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171525';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, readNoteFull, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171525';
-import { buildSystem, TONES, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171525';
+import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171533';
+import { Listener, speechSupported } from './speech.js?v=202611171533';
+import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171533';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, readNoteFull, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171533';
+import { buildSystem, TONES, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171533';
 
-import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171525';
-import { LiveSession, pickLiveModels, LIVE_VOICES, previewVoice, DEFAULT_LIVE_VOICE, SAFE_LIVE_VOICE } from './live.js?v=202611171525';
-import { createOnboarding } from './onboarding.js?v=202611171525';
-import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611171525';
-import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611171525';
-import { stripExt, isMarkdown, kindOf, extractText, fileToBase64, OCR_PROMPT, ACCEPT } from './docs.js?v=202611171525';
-import { dbGet, dbPut } from './db.js?v=202611171525';
+import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171533';
+import { LiveSession, pickLiveModels, LIVE_VOICES, previewVoice, playChunks, DEFAULT_LIVE_VOICE, SAFE_LIVE_VOICE, CLASSIC_VOICES } from './live.js?v=202611171533';
+import { mountVoicePicker } from './voicepicker.js?v=202611171533';
+import { createOnboarding } from './onboarding.js?v=202611171533';
+import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611171533';
+import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611171533';
+import { stripExt, isMarkdown, kindOf, extractText, fileToBase64, OCR_PROMPT, ACCEPT } from './docs.js?v=202611171533';
+import { dbGet, dbPut } from './db.js?v=202611171533';
 
 const $ = (s) => document.querySelector(s);
 
@@ -27,6 +28,7 @@ const DEFAULTS = {
   liveVoice: DEFAULT_LIVE_VOICE,
   tone: 'confidenziale', // confidenziale | equilibrato | professionale
   onboarded: false, // presentazione iniziale completata
+  voiceSupport: {}, // per ogni voce: con quale modello Live funziona (ok) e con quali no (ko)
   liveModels: [], // modelli Live disponibili per la chiave
   annotate: true, // registra argomento, concetti ed errori dopo ogni risposta
   profile: { name: '', university: '', degree: '', year: '', notes: '' }, // percorso di studi, per dare contesto a JARVIS
@@ -414,7 +416,7 @@ async function startLive() {
       return;
     }
   }
-  liveQueue = pickLiveModels(available, settings.liveModel);
+  liveQueue = orderModelsForVoice(pickLiveModels(available, settings.liveModel), settings.liveVoice);
   if (!liveQueue.length) {
     addBubble('error', 'La tua chiave non ha modelli Gemini Live disponibili.');
     return;
@@ -1097,14 +1099,12 @@ function openSettings() {
   $('#set-name').value = pr.name || '';
   $('#set-tone').replaceChildren(...Object.entries(TONES).map(([id, t]) => new Option(`${t.label} — ${t.desc}`, id)));
   $('#set-tone').value = settings.tone || 'confidenziale';
-  $('#preview-status').textContent = '';
   $('#set-university').value = pr.university || '';
   $('#set-degree').value = pr.degree || '';
   $('#set-year').value = pr.year || '';
   $('#set-profile-notes').value = pr.notes || '';
   fillLiveModels();
-  $('#set-live-voice').replaceChildren(...LIVE_VOICES.map((v) => new Option(`${v.name} — ${v.desc}`, v.name)));
-  $('#set-live-voice').value = settings.liveVoice || DEFAULT_LIVE_VOICE;
+  mountVoices($('#set-voice-picker'), $('#set-live-voice'), () => $('#set-key').value.trim() || settings.key);
   $('#set-key').value = settings.key;
   $('#set-model').value = settings.model;
   $('#set-fast').checked = settings.fast;
@@ -1160,25 +1160,100 @@ async function verifyKey(key) {
   }
 }
 
+/** Ordina i modelli Live per una voce: prima quello con cui è già stata sentita, poi i «native audio» (che hanno tutte le 30 voci). */
+function orderModelsForVoice(models, voice) {
+  const sup = settings.voiceSupport?.[voice] || {};
+  let order = [...models];
+  if (!CLASSIC_VOICES.includes(voice)) order = [...order.filter((m) => /native-audio/.test(m)), ...order.filter((m) => !/native-audio/.test(m))];
+  const ko = sup.ko || [];
+  order = [...order.filter((m) => !ko.includes(m)), ...order.filter((m) => ko.includes(m))];
+  if (sup.ok && order.includes(sup.ok)) order = [sup.ok, ...order.filter((m) => m !== sup.ok)];
+  return order;
+}
+
+function previewText() {
+  const name = settings.profile?.name;
+  return settings.tone === 'professionale'
+    ? `Ciao${name ? ` ${name}` : ''}, sono JARVIS. Quando vuoi iniziamo il ripasso: tu esponi e io ti correggo.`
+    : `Ciao${name ? ` ${name}` : ''}! Sono JARVIS. Dai, quando vuoi ripassiamo insieme: tu mi racconti e io ti dico se fila tutto.`;
+}
+
+/** Anteprima di una voce: dalla memoria se già ascoltata, altrimenti prova fino a 3 modelli Live. */
 async function previewLiveVoice(voice, key = settings.key) {
+  const text = previewText();
+  const cacheKey = `vprev:${voice}:${text}`;
+  const cached = await dbGet('kv', cacheKey).catch(() => null);
+  if (cached?.chunks?.length) {
+    await playChunks(cached.chunks);
+    return { model: cached.model, cached: true };
+  }
   let models = settings.liveModels;
   if (!models?.length) {
     models = liveCandidates(await listAllModels(key));
     settings.liveModels = models;
     saveSettings();
   }
-  const model = pickLiveModels(models, settings.liveModel)[0];
-  if (!model) throw new Error('la tua chiave non ha modelli per la voce dal vivo');
-  const name = settings.profile?.name;
-  const text = settings.tone === 'professionale'
-    ? `Ciao${name ? ` ${name}` : ''}, sono JARVIS. Quando vuoi iniziamo il ripasso: tu esponi e io ti correggo.`
-    : `Ciao${name ? ` ${name}` : ''}! Sono JARVIS. Dai, quando vuoi ripassiamo insieme: tu mi racconti e io ti dico se fila tutto.`;
+  if (!models.length) throw new Error('la tua chiave non ha modelli per la voce dal vivo');
+  settings.voiceSupport = settings.voiceSupport || {};
+  const sup = settings.voiceSupport[voice] || (settings.voiceSupport[voice] = { ok: '', ko: [] });
+  let last = null;
+  for (const model of orderModelsForVoice(pickLiveModels(models, settings.liveModel), voice).slice(0, 3)) {
+    try {
+      const chunks = await previewVoice({ key, model, voice, text });
+      sup.ok = model;
+      sup.ko = sup.ko.filter((m) => m !== model);
+      saveSettings();
+      dbPut('kv', { model, chunks }, cacheKey).catch(() => {});
+      return { model };
+    } catch (err) {
+      last = err;
+      if (!err.voiceProblem) throw err; // quota, chiave, rete: inutile provare altri modelli
+      if (!sup.ko.includes(model)) sup.ko.push(model);
+      saveSettings();
+    }
+  }
+  const e = new Error(`nessun modello della tua chiave la fa parlare${last ? ` (${last.message})` : ''}`);
+  e.voiceProblem = true;
+  throw e;
+}
+
+// Stato delle schede delle voci (ascoltata, non disponibile, errore)
+const voiceState = {};
+function voiceStateOf(voice) {
+  if (voiceState[voice]) return voiceState[voice];
+  const sup = settings.voiceSupport?.[voice];
+  if (sup?.ok) return { kind: 'ok' };
+  return {};
+}
+async function playVoiceCard(voice, key) {
+  voiceState[voice] = { kind: 'busy' };
   try {
-    await previewVoice({ key, model, voice, text });
+    await previewLiveVoice(voice, key);
+    voiceState[voice] = { kind: 'ok' };
   } catch (err) {
-    if (/voice|speech/i.test(err.message)) throw new Error(`la voce ${voice} non è disponibile con ${model}`);
+    voiceState[voice] = err.voiceProblem
+      ? { kind: 'ko', note: err.message }
+      : { kind: '', note: `Non riesco a farla ascoltare: ${err.message}` };
     throw err;
   }
+}
+function mountVoices(root, select, keyGetter) {
+  select.replaceChildren(...LIVE_VOICES.map((v) => new Option(v.name, v.name)));
+  // Voci non più in elenco (scelte in versioni precedenti) → quella predefinita
+  select.value = LIVE_VOICES.some((v) => v.name === settings.liveVoice) ? settings.liveVoice : DEFAULT_LIVE_VOICE;
+  return mountVoicePicker(root, {
+    voices: LIVE_VOICES,
+    select,
+    play: (v) => {
+      const key = keyGetter();
+      if (!key) {
+        voiceState[v] = { kind: '', note: 'Per ascoltare le voci serve la chiave Gemini.' };
+        return Promise.reject(new Error('chiave mancante'));
+      }
+      return playVoiceCard(v, key);
+    },
+    state: voiceStateOf,
+  });
 }
 
 const onboarding = createOnboarding({
@@ -1200,7 +1275,7 @@ const onboarding = createOnboarding({
   },
   folderName: () => vault.root?.name || '',
   tones: TONES,
-  voices: LIVE_VOICES,
+  mountVoices: (root, select) => mountVoices(root, select, () => $('#wz-key').value.trim() || settings.key),
   onFinish: () => {
     const n = settings.profile?.name;
     addBubble('info', `Tutto pronto${n ? `, ${n}` : ''}! Apri una lezione (o dimmi «apri …») e premi «Parla con JARVIS».`, { transient: true });
@@ -1430,18 +1505,6 @@ function init() {
   $('#btn-save-summary').onclick = saveSummary;
 
   $('#btn-welcome').onclick = () => { $('#dlg-settings').close(); onboarding.open(); };
-  $('#btn-preview-voice').onclick = async () => {
-    const st = $('#preview-status');
-    const key = $('#set-key').value.trim() || settings.key;
-    if (!key) { st.textContent = 'Serve la chiave Gemini.'; return; }
-    st.textContent = 'Ascolta…';
-    try {
-      await previewLiveVoice($('#set-live-voice').value, key);
-      st.textContent = '';
-    } catch (err) {
-      st.textContent = `Anteprima non riuscita: ${err.message}`;
-    }
-  };
 
   if (!settings.onboarded) {
     onboarding.open();

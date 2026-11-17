@@ -1,5 +1,5 @@
-import { isSupported, stripExt, extractText } from './docs.js?v=202611171525';
-import { dbGet, dbPut } from './db.js?v=202611171525';
+import { isSupported, stripExt, extractText } from './docs.js?v=202611171533';
+import { dbGet, dbPut } from './db.js?v=202611171533';
 
 // Accesso diretto alla cartella del vault Obsidian con la File System Access API (Chrome/Edge su PC).
 

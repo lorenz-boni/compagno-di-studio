@@ -44,7 +44,8 @@ JARVIS ti presenta 4 passi (ognuno si può saltare e cambiare dopo da ⚙️ Imp
   1. come ti chiami e il tuo percorso di studi (università, corso, anno);
   2. la chiave gratuita di Gemini: https://aistudio.google.com/apikey → «Crea chiave API»
      (meglio in un progetto nuovo, senza fatturazione) → incollala → «Verifica»;
-  3. il tono (confidenziale, equilibrato, professionale) e la voce (▶ Ascolta per sentirle);
+  3. il tono (confidenziale, equilibrato, professionale) e la voce: 8 voci con un carattere
+     (il compagno di corso, la voce calda, il narratore, la prof…), premi ▶ per sentirle;
   4. la cartella dei tuoi appunti: Chrome chiede il permesso, scegli «Consenti a ogni visita».
 
 

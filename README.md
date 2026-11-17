@@ -66,7 +66,7 @@ I PDF e i Word non vengono mai modificati: *Facciamo il punto* salva il resocont
 Alla prima apertura una **presentazione guidata** chiede:
 1. nome e percorso di studi (università, corso, anno, note);
 2. la chiave gratuita di Gemini, con la verifica;
-3. il **tono** (*Confidenziale*, *Equilibrato* o *Professionale*) e la **voce**: 30 voci di Gemini Live con descrizione e ▶ Ascolta;
+3. il **tono** (*Confidenziale*, *Equilibrato* o *Professionale*) e la **voce**: 8 voci selezionate di Gemini Live, ognuna con un carattere (Il compagno di corso, La voce calda, Il narratore, La tutor paziente, L'amico rilassato, La voce leggera, L'energico, La prof), con ▶ per ascoltarle. Se una voce non funziona con un modello, l'app prova il successivo e se lo ricorda. Le anteprime già ascoltate si riascoltano senza consumare quota;
 4. la cartella degli appunti.
 
 Ogni passo si può saltare. Tutto si cambia in ⚙️ Impostazioni, da dove si può anche rivedere la presentazione.

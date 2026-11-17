@@ -11,41 +11,21 @@ export const LIVE_PREFERENCE = [
   'gemini-2.5-flash-native-audio-preview-12-2025',
   'gemini-2.5-flash-native-audio-preview-09-2025',
 ];
-// Voci di Gemini Live con il loro carattere (descrizioni di Google, tradotte). Le prime sono le più adatte
-// a un tono confidenziale.
+// Voci di Gemini Live selezionate: poche, con un carattere riconoscibile (4 femminili, 4 maschili).
+// `label` è il "personaggio" mostrato all'utente, `name` il nome tecnico della voce di Google.
 export const LIVE_VOICES = [
-  { name: 'Achird', desc: 'amichevole' },
-  { name: 'Sulafat', desc: 'calda' },
-  { name: 'Zubenelgenubi', desc: 'informale' },
-  { name: 'Callirrhoe', desc: 'rilassata' },
-  { name: 'Umbriel', desc: 'rilassata' },
-  { name: 'Vindemiatrix', desc: 'gentile' },
-  { name: 'Achernar', desc: 'dolce' },
-  { name: 'Algieba', desc: 'morbida' },
-  { name: 'Despina', desc: 'morbida' },
-  { name: 'Aoede', desc: 'leggera' },
-  { name: 'Puck', desc: 'vivace' },
-  { name: 'Laomedeia', desc: 'vivace' },
-  { name: 'Sadachbia', desc: 'vivace' },
-  { name: 'Fenrir', desc: 'entusiasta' },
-  { name: 'Leda', desc: 'giovanile' },
-  { name: 'Zephyr', desc: 'luminosa' },
-  { name: 'Autonoe', desc: 'luminosa' },
-  { name: 'Iapetus', desc: 'chiara' },
-  { name: 'Erinome', desc: 'chiara' },
-  { name: 'Schedar', desc: 'pacata' },
-  { name: 'Gacrux', desc: 'matura' },
-  { name: 'Sadaltager', desc: 'competente' },
-  { name: 'Charon', desc: 'informativa' },
-  { name: 'Rasalgethi', desc: 'informativa' },
-  { name: 'Kore', desc: 'decisa' },
-  { name: 'Orus', desc: 'decisa' },
-  { name: 'Alnilam', desc: 'decisa' },
-  { name: 'Pulcherrima', desc: 'diretta' },
-  { name: 'Enceladus', desc: 'sussurrata' },
-  { name: 'Algenib', desc: 'roca' },
+  { name: 'Achird', label: 'Il compagno di corso', desc: 'amichevole, spontaneo e alla mano', g: 'M' },
+  { name: 'Sulafat', label: 'La voce calda', desc: 'avvolgente e rassicurante', g: 'F' },
+  { name: 'Charon', label: 'Il narratore', desc: 'profonda e pacata', g: 'M' },
+  { name: 'Vindemiatrix', label: 'La tutor paziente', desc: 'gentile e tranquilla', g: 'F' },
+  { name: 'Zubenelgenubi', label: "L'amico rilassato", desc: 'informale, senza fretta', g: 'M' },
+  { name: 'Aoede', label: 'La voce leggera', desc: 'ariosa e luminosa', g: 'F' },
+  { name: 'Puck', label: "L'energico", desc: 'vivace, ti tiene sveglio', g: 'M' },
+  { name: 'Kore', label: 'La prof', desc: 'chiara, decisa e sicura', g: 'F' },
 ];
 export const DEFAULT_LIVE_VOICE = 'Achird';
+// Le 8 voci storiche, supportate da tutti i modelli Live. Le altre richiedono i modelli «native audio».
+export const CLASSIC_VOICES = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Aoede', 'Leda', 'Orus', 'Zephyr'];
 export const SAFE_LIVE_VOICE = 'Kore'; // supportata da tutti i modelli Live
 
 /** Ordina i modelli Live disponibili: quello scelto, poi le preferenze, poi gli altri adatti. */
@@ -94,7 +74,7 @@ export class LiveSession {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
     });
     this.inCtx = new AudioContext({ sampleRate: 16000 });
-    await this.inCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611171525', import.meta.url));
+    await this.inCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611171533', import.meta.url));
     const src = this.inCtx.createMediaStreamSource(this.stream);
     this.node = new AudioWorkletNode(this.inCtx, 'pcm-capture');
     this.node.port.onmessage = (e) => this.#sendAudio(e.data);
@@ -275,27 +255,54 @@ export class LiveSession {
   }
 }
 
+/** Riproduce pezzi di audio PCM 24 kHz (base64). Restituisce una Promise che si risolve a fine riproduzione. */
+export function playChunks(chunks) {
+  return new Promise((resolve) => {
+    const ctx = new AudioContext({ sampleRate: 24000 });
+    let next = ctx.currentTime + 0.05;
+    for (const b64 of chunks) {
+      const bytes = fromBase64(b64);
+      const pcm = new Int16Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 2));
+      const buf = ctx.createBuffer(1, pcm.length, 24000);
+      const ch = buf.getChannelData(0);
+      for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(next);
+      next += buf.duration;
+    }
+    setTimeout(() => { ctx.close().catch(() => {}); resolve(); }, Math.max(0, (next - ctx.currentTime) * 1000) + 150);
+  });
+}
+
 /**
  * Fa ascoltare una voce di Gemini Live senza aprire il microfono: legge una frase e chiude.
- * Restituisce una Promise che si risolve a fine lettura (o rifiuta con il motivo).
+ * Si risolve con i pezzi di audio ricevuti (per poterli riascoltare senza nuove richieste).
+ * Rifiuta con un errore il cui campo `voiceProblem` è vero se il modello non accetta quella voce.
  */
 export function previewVoice({ key, model, voice, text, timeoutMs = 20000 }) {
   return new Promise((resolve, reject) => {
     const ctx = new AudioContext({ sampleRate: 24000 });
+    const chunks = [];
     let next = 0;
-    let got = false;
     let done = false;
     const ws = new WebSocket(`${WS_URL}?key=${encodeURIComponent(key)}`);
     ws.binaryType = 'arraybuffer';
+    const fail = (message, voiceProblem = false) => {
+      const e = new Error(message);
+      e.voiceProblem = voiceProblem;
+      return e;
+    };
     const finish = (err) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
       try { ws.close(1000); } catch { /* già chiuso */ }
-      const wait = Math.max(0, (next - ctx.currentTime) * 1000) + 150;
-      setTimeout(() => { ctx.close().catch(() => {}); if (err) reject(err); else resolve(); }, err ? 0 : wait);
+      const wait = err ? 0 : Math.max(0, (next - ctx.currentTime) * 1000) + 150;
+      setTimeout(() => { ctx.close().catch(() => {}); if (err) reject(err); else resolve(chunks); }, wait);
     };
-    const timer = setTimeout(() => finish(got ? null : new Error('nessuna risposta dalla voce')), timeoutMs);
+    const timer = setTimeout(() => finish(chunks.length ? null : fail('nessun audio ricevuto in tempo', true)), timeoutMs);
     ws.onopen = () => ws.send(JSON.stringify({
       setup: {
         model: `models/${model}`,
@@ -312,7 +319,7 @@ export function previewVoice({ key, model, voice, text, timeoutMs = 20000 }) {
       }
       for (const p of msg.serverContent?.modelTurn?.parts || []) {
         if (!p.inlineData?.data) continue;
-        got = true;
+        chunks.push(p.inlineData.data);
         const bytes = fromBase64(p.inlineData.data);
         const pcm = new Int16Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 2));
         const buf = ctx.createBuffer(1, pcm.length, 24000);
@@ -325,8 +332,15 @@ export function previewVoice({ key, model, voice, text, timeoutMs = 20000 }) {
         src.start(next);
         next += buf.duration;
       }
-      if (msg.serverContent?.turnComplete) finish(null);
+      if (msg.serverContent?.turnComplete) finish(chunks.length ? null : fail('il modello non ha prodotto audio con questa voce', true));
     };
-    ws.onclose = (e) => { if (!done) finish(got ? null : new Error(e.reason || `connessione chiusa (${e.code})`)); };
+    ws.onclose = (e) => {
+      if (done) return;
+      if (chunks.length) { finish(null); return; }
+      const reason = e.reason || `connessione chiusa (codice ${e.code})`;
+      // Quota o chiave: non è colpa della voce
+      const notVoice = /quota|exceeded|api key|permission|billing|rate/i.test(reason);
+      finish(fail(reason, !notVoice));
+    };
   });
 }
