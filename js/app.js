@@ -1,8 +1,8 @@
-import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171124';
-import { Listener, speechSupported } from './speech.js?v=202611171124';
-import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171124';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171124';
-import { buildSystem, FINISHED_PREFIX, START_QUIZ, summaryRequest, VAULT_TOOLS } from './prompts.js?v=202611171124';
+import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171131';
+import { Listener, speechSupported } from './speech.js?v=202611171131';
+import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171131';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171131';
+import { buildSystem, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS } from './prompts.js?v=202611171131';
 
 const $ = (s) => document.querySelector(s);
 
@@ -44,6 +44,7 @@ const MODE_HELP = {
   racconto: () => settings.correction === 'fine'
     ? 'Racconta tutto l\'argomento di fila. Quando hai finito premi "Ho finito": riceverai un resoconto completo.'
     : 'Racconta l\'argomento come a un compagno di corso. A ogni pausa ti dice se va bene o ti corregge. Parla sopra la sua voce per interromperlo.',
+  spiegami: () => 'Il compagno ti rispiega gli appunti sezione per sezione, senza saltare niente, e alla fine di ogni parte ti fa una domanda. Premi 🎙️ per iniziare; di\' «vai avanti» per passare alla parte successiva.',
   interrogami: () => 'Premi 🎙️ (o "Ho finito"): il compagno inizia con la prima domanda. Rispondi a voce.',
   libera: () => 'Fai domande o discuti liberamente dell\'argomento.',
 };
@@ -263,8 +264,13 @@ async function runTool({ name, args = {} }) {
 }
 
 function startQuizIfNeeded() {
-  if (mode === 'interrogami' && history.length === 0 && !controller) {
+  if (history.length || controller) return false;
+  if (mode === 'interrogami') {
     sendUser(START_QUIZ, '', { hidden: true });
+    return true;
+  }
+  if (mode === 'spiegami' && note) {
+    sendUser(START_EXPLAIN, '', { hidden: true });
     return true;
   }
   return false;
