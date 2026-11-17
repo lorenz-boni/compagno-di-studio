@@ -61,9 +61,17 @@ I **PDF scansionati** (immagini senza testo selezionabile) vengono trascritti da
 
 I PDF e i Word non vengono mai modificati: *Facciamo il punto* salva il resoconto in una nota `<nome> - ripassi.md` accanto al file. Anche **Carica file** accetta PDF e Word.
 
-## Il tuo percorso di studi
+## Primo avvio, tono e voce
 
-In ⚙️ Impostazioni → *Il tuo percorso di studi* puoi indicare università, corso di laurea, anno e note libere (es. "esame orale, il prof. chiede le dimostrazioni"). JARVIS li usa per adattare livello, terminologia ed esempi.
+Alla prima apertura una **presentazione guidata** chiede:
+1. nome e percorso di studi (università, corso, anno, note);
+2. la chiave gratuita di Gemini, con la verifica;
+3. il **tono** (*Confidenziale*, *Equilibrato* o *Professionale*) e la **voce**: 30 voci di Gemini Live con descrizione e ▶ Ascolta;
+4. la cartella degli appunti.
+
+Ogni passo si può saltare. Tutto si cambia in ⚙️ Impostazioni, da dove si può anche rivedere la presentazione.
+
+La voce naturale è quella di **Parla con JARVIS** (Gemini Live). Il microfono classico usa la voce di Chrome, più meccanica.
 
 ## Costi e privacy
 

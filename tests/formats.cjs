@@ -22,7 +22,7 @@ const serve = require('./_server.cjs');
   });
   await page.addInitScript(() => {
     localStorage.setItem('compagno.settings', JSON.stringify({
-      key: 'TEST', mute: true, annotate: false,
+      onboarded: true, key: 'TEST', mute: true, annotate: false,
       profile: { university: 'Politecnico di Milano', degree: 'Ingegneria per l\'ambiente e il territorio', year: '1° anno magistrale', notes: 'esame orale' },
     }));
     // Cartella simulata in memoria (lettura e scrittura) con i file veri di tests/fixtures

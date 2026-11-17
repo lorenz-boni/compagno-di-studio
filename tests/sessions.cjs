@@ -14,7 +14,7 @@ const serve = require('./_server.cjs');
     const last = body.contents[body.contents.length - 1].parts.map((p) => p.text).join(' ');
     await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: `Risposta a: ${last}` }] } }] })}\n\n` });
   });
-  await page.addInitScript(() => localStorage.setItem('compagno.settings', JSON.stringify({ annotate: false, key: 'TEST', mute: true })));
+  await page.addInitScript(() => localStorage.setItem('compagno.settings', JSON.stringify({ onboarded: true, annotate: false, key: 'TEST', mute: true })));
   await page.goto('http://localhost:8770/');
   const say = async (t) => { await page.fill('#text-input', t); await page.press('#text-input', 'Enter'); await page.waitForSelector(`.bubble.bot >> text=Risposta a: ${t}`); };
   // conversazione 1 su appunti incollati

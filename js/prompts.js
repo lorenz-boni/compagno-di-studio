@@ -72,6 +72,22 @@ function vaultSection(vault) {
 Quando l'utente chiede di cercare, aprire o studiare una materia, una lezione o un argomento (es. "apri fluidodinamica 1, lezione 3"), usa SUBITO cerca_note. Se la ricerca trova una sola nota adatta la apre da sola (risposta con "aperta"): in quel caso NON chiamare apri_nota. Altrimenti usa apri_nota sul risultato giusto, senza chiedere conferma se è evidente. Se ci sono più risultati plausibili, leggi i nomi di 2 o 3 opzioni e chiedi quale. I numeri detti a voce corrispondono ai numeri nei nomi dei file ("lezione tre" = "Lezione 03"). Dopo aver aperto una nota, dì in una frase cosa hai aperto e poi: in "Spiegami" inizia subito a spiegare la prima sezione; in "Te lo racconto" invita l'utente a raccontare; in "Interrogami" fai la prima domanda.`;
 }
 
+export const TONES = {
+  confidenziale: { label: 'Confidenziale', desc: 'come un amico di corso: caldo, ti chiama per nome, sdrammatizza' },
+  equilibrato: { label: 'Equilibrato', desc: 'cordiale ma sobrio' },
+  professionale: { label: 'Professionale', desc: 'come un tutor universitario: preciso e asciutto' },
+};
+
+function toneSection(tone, name) {
+  const n = String(name || '').trim();
+  const t = {
+    confidenziale: `TONO: confidenziale e caldo, come un amico di corso con cui si studia volentieri. Dai del tu${n ? `, chiama l'utente "${n}" ogni tanto (non a ogni frase)` : ''}. Usa espressioni colloquiali naturali ("dai", "ok, ci sta", "occhio però", "grande!", "tranquillo, capita"), incoraggia quando va bene e sdrammatizza gli errori senza essere mai sdolcinato o ripetitivo. Frasi vive e spontanee, come si parla davvero, non come un libro.`,
+    equilibrato: `TONO: cordiale ma sobrio. Dai del tu${n ? ` (l'utente si chiama ${n})` : ''}, niente espressioni troppo colloquiali.`,
+    professionale: `TONO: da tutor universitario, preciso e asciutto. Dai del tu${n ? ` (l'utente si chiama ${n})` : ''}, senza espressioni colloquiali né complimenti superflui.`,
+  }[tone] || '';
+  return t ? `\n\n${t}` : '';
+}
+
 function profileSection(profile) {
   if (!profile) return '';
   const p = {
@@ -79,9 +95,10 @@ function profileSection(profile) {
     degree: String(profile.degree || '').trim(),
     year: String(profile.year || '').trim(),
     notes: String(profile.notes || '').trim(),
+    name: String(profile.name || '').trim(),
   };
-  if (!p.university && !p.degree && !p.year && !p.notes) return '';
-  const who = [p.degree && `studia ${p.degree}`, p.year && `(${p.year})`, p.university && `presso ${p.university}`].filter(Boolean).join(' ');
+  if (!p.university && !p.degree && !p.year && !p.notes && !p.name) return '';
+  const who = [p.name && `si chiama ${p.name},`, p.degree && `studia ${p.degree}`, p.year && `(${p.year})`, p.university && `presso ${p.university}`].filter(Boolean).join(' ');
   return `\n\nCHI È L'UTENTE: ${who || 'uno studente universitario'}.${p.notes ? ` Note dell'utente: ${p.notes}` : ''}
 Adatta livello di approfondimento, terminologia, notazione ed esempi a questo percorso di studi e al modo in cui si svolgono gli esami lì. Non citare questi dati se non serve.`;
 }
@@ -91,7 +108,7 @@ function memorySection(memory) {
   return `\n\nMEMORIA DELLO STUDIO SU QUESTI APPUNTI (raccolta automaticamente nelle conversazioni, può essere imprecisa):\n${memory}\nUsala con discrezione: quando è utile torna sui punti deboli e sugli errori già fatti (per esempio con una domanda), senza elencarli tutti e senza ripeterli a ogni risposta.`;
 }
 
-export function buildSystem({ mode, correction, note, vault, memory, profile }) {
+export function buildSystem({ mode, correction, note, vault, memory, profile, tone = 'confidenziale' }) {
   const modeText = mode === 'racconto' ? MODES.racconto[correction === 'fine' ? 'fine' : 'subito'] : MODES[mode] || MODES.libera;
 
   let noteText;
@@ -104,7 +121,7 @@ export function buildSystem({ mode, correction, note, vault, memory, profile }) 
       ? `Non è ancora aperta nessuna nota. Se l'utente non ha detto quale lezione o argomento studiare, chiediglielo brevemente e poi aprila dal vault.`
       : `Non ci sono appunti caricati: usa la tua conoscenza generale e dillo quando correggi ("in generale…"). Se l'utente non ha detto di che argomento si tratta, chiediglielo.`;
   }
-  return `${BASE}${profileSection(profile)}\n\n${modeText}\n\n${noteText}${memorySection(memory)}${vaultSection(vault)}`;
+  return `${BASE}${toneSection(tone, profile?.name)}${profileSection(profile)}\n\n${modeText}\n\n${noteText}${memorySection(memory)}${vaultSection(vault)}`;
 }
 
 export const FINISHED_PREFIX = '[L\'utente ha finito di raccontare. Ecco tutta la sua esposizione:]\n';

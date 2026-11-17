@@ -11,7 +11,42 @@ export const LIVE_PREFERENCE = [
   'gemini-2.5-flash-native-audio-preview-12-2025',
   'gemini-2.5-flash-native-audio-preview-09-2025',
 ];
-export const LIVE_VOICES = ['Kore', 'Aoede', 'Leda', 'Zephyr', 'Puck', 'Charon', 'Fenrir', 'Orus'];
+// Voci di Gemini Live con il loro carattere (descrizioni di Google, tradotte). Le prime sono le più adatte
+// a un tono confidenziale.
+export const LIVE_VOICES = [
+  { name: 'Achird', desc: 'amichevole' },
+  { name: 'Sulafat', desc: 'calda' },
+  { name: 'Zubenelgenubi', desc: 'informale' },
+  { name: 'Callirrhoe', desc: 'rilassata' },
+  { name: 'Umbriel', desc: 'rilassata' },
+  { name: 'Vindemiatrix', desc: 'gentile' },
+  { name: 'Achernar', desc: 'dolce' },
+  { name: 'Algieba', desc: 'morbida' },
+  { name: 'Despina', desc: 'morbida' },
+  { name: 'Aoede', desc: 'leggera' },
+  { name: 'Puck', desc: 'vivace' },
+  { name: 'Laomedeia', desc: 'vivace' },
+  { name: 'Sadachbia', desc: 'vivace' },
+  { name: 'Fenrir', desc: 'entusiasta' },
+  { name: 'Leda', desc: 'giovanile' },
+  { name: 'Zephyr', desc: 'luminosa' },
+  { name: 'Autonoe', desc: 'luminosa' },
+  { name: 'Iapetus', desc: 'chiara' },
+  { name: 'Erinome', desc: 'chiara' },
+  { name: 'Schedar', desc: 'pacata' },
+  { name: 'Gacrux', desc: 'matura' },
+  { name: 'Sadaltager', desc: 'competente' },
+  { name: 'Charon', desc: 'informativa' },
+  { name: 'Rasalgethi', desc: 'informativa' },
+  { name: 'Kore', desc: 'decisa' },
+  { name: 'Orus', desc: 'decisa' },
+  { name: 'Alnilam', desc: 'decisa' },
+  { name: 'Pulcherrima', desc: 'diretta' },
+  { name: 'Enceladus', desc: 'sussurrata' },
+  { name: 'Algenib', desc: 'roca' },
+];
+export const DEFAULT_LIVE_VOICE = 'Achird';
+export const SAFE_LIVE_VOICE = 'Kore'; // supportata da tutti i modelli Live
 
 /** Ordina i modelli Live disponibili: quello scelto, poi le preferenze, poi gli altri adatti. */
 export function pickLiveModels(available, chosen) {
@@ -59,7 +94,7 @@ export class LiveSession {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
     });
     this.inCtx = new AudioContext({ sampleRate: 16000 });
-    await this.inCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611171513', import.meta.url));
+    await this.inCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611171525', import.meta.url));
     const src = this.inCtx.createMediaStreamSource(this.stream);
     this.node = new AudioWorkletNode(this.inCtx, 'pcm-capture');
     this.node.port.onmessage = (e) => this.#sendAudio(e.data);
@@ -89,7 +124,7 @@ export class LiveSession {
         model: `models/${this.o.model}`,
         generationConfig: {
           responseModalities: ['AUDIO'],
-          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: this.o.voice || 'Kore' } } },
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: this.o.voice || SAFE_LIVE_VOICE } } },
         },
         systemInstruction: { parts: [{ text: this.o.system }] },
         inputAudioTranscription: {},
@@ -238,4 +273,60 @@ export class LiveSession {
     this.outCtx?.close().catch(() => {});
     this.o.onState?.('closed');
   }
+}
+
+/**
+ * Fa ascoltare una voce di Gemini Live senza aprire il microfono: legge una frase e chiude.
+ * Restituisce una Promise che si risolve a fine lettura (o rifiuta con il motivo).
+ */
+export function previewVoice({ key, model, voice, text, timeoutMs = 20000 }) {
+  return new Promise((resolve, reject) => {
+    const ctx = new AudioContext({ sampleRate: 24000 });
+    let next = 0;
+    let got = false;
+    let done = false;
+    const ws = new WebSocket(`${WS_URL}?key=${encodeURIComponent(key)}`);
+    ws.binaryType = 'arraybuffer';
+    const finish = (err) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { ws.close(1000); } catch { /* già chiuso */ }
+      const wait = Math.max(0, (next - ctx.currentTime) * 1000) + 150;
+      setTimeout(() => { ctx.close().catch(() => {}); if (err) reject(err); else resolve(); }, err ? 0 : wait);
+    };
+    const timer = setTimeout(() => finish(got ? null : new Error('nessuna risposta dalla voce')), timeoutMs);
+    ws.onopen = () => ws.send(JSON.stringify({
+      setup: {
+        model: `models/${model}`,
+        generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } },
+        systemInstruction: { parts: [{ text: 'Leggi ad alta voce, in italiano, esattamente il testo che ricevi, con tono caldo e naturale. Non aggiungere altro.' }] },
+      },
+    }));
+    ws.onmessage = (e) => {
+      let msg;
+      try { msg = JSON.parse(typeof e.data === 'string' ? e.data : new TextDecoder().decode(e.data)); } catch { return; }
+      if (msg.setupComplete) {
+        ws.send(JSON.stringify({ clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true } }));
+        return;
+      }
+      for (const p of msg.serverContent?.modelTurn?.parts || []) {
+        if (!p.inlineData?.data) continue;
+        got = true;
+        const bytes = fromBase64(p.inlineData.data);
+        const pcm = new Int16Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 2));
+        const buf = ctx.createBuffer(1, pcm.length, 24000);
+        const ch = buf.getChannelData(0);
+        for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(ctx.destination);
+        next = Math.max(next, ctx.currentTime + 0.03);
+        src.start(next);
+        next += buf.duration;
+      }
+      if (msg.serverContent?.turnComplete) finish(null);
+    };
+    ws.onclose = (e) => { if (!done) finish(got ? null : new Error(e.reason || `connessione chiusa (${e.code})`)); };
+  });
 }

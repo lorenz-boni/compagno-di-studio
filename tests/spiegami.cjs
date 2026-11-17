@@ -20,7 +20,7 @@ const srv = http.createServer((req, res) => {
     await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: 'Partiamo dalla prima sezione.' }] } }] })}\n\n` });
   });
   await page.addInitScript(() => {
-    localStorage.setItem('compagno.settings', JSON.stringify({ annotate: false, key: 'TEST', mute: true }));
+    localStorage.setItem('compagno.settings', JSON.stringify({ onboarded: true, annotate: false, key: 'TEST', mute: true }));
     class FakeRec { start() {} stop() {} }
     window.webkitSpeechRecognition = FakeRec; window.SpeechRecognition = FakeRec;
   });

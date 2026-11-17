@@ -28,7 +28,7 @@ const serve = require('./_server.cjs');
     return sse('Ok, ti seguo.');
   });
   await page.addInitScript(() => {
-    localStorage.setItem('compagno.settings', JSON.stringify({ key: 'TEST', mute: true }));
+    localStorage.setItem('compagno.settings', JSON.stringify({ onboarded: true, key: 'TEST', mute: true }));
     const file = (name, text) => ({ kind: 'file', name, getFile: async () => ({ text: async () => text }) });
     const dir = (name, children) => ({ kind: 'directory', name, async *entries() { for (const c of children) yield [c.name, c]; }, queryPermission: async () => 'granted', requestPermission: async () => 'granted', getDirectoryHandle: async () => { throw new Error('no'); } });
     window.showDirectoryPicker = async () => dir('Università', [dir('Fisica tecnica', [file('Lezione 4 - Secondo principio.md', "L'entropia di un sistema isolato non diminuisce.")])]);

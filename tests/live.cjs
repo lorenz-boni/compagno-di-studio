@@ -47,7 +47,7 @@ const serve = require('./_server.cjs');
     });
   });
   await page.addInitScript(() => {
-    localStorage.setItem('compagno.settings', JSON.stringify({ annotate: false, key: 'TEST', mute: true, liveModels: ['gemini-2.5-flash-native-audio-latest', 'gemini-3.1-flash-live-preview', 'gemini-3.5-transcribe-live'] }));
+    localStorage.setItem('compagno.settings', JSON.stringify({ onboarded: true, annotate: false, key: 'TEST', mute: true, liveModels: ['gemini-2.5-flash-native-audio-latest', 'gemini-3.1-flash-live-preview', 'gemini-3.5-transcribe-live'] }));
     const file = (name, text) => ({ kind: 'file', name, getFile: async () => ({ text: async () => text }) });
     const dir = (name, children) => ({ kind: 'directory', name, async *entries() { for (const c of children) yield [c.name, c]; }, queryPermission: async () => 'granted', requestPermission: async () => 'granted', getDirectoryHandle: async () => { throw new Error('no'); } });
     window.showDirectoryPicker = async () => dir('Università', [dir('Fluidodinamica 1', [file('Lezione 03 - Bernoulli.md', 'Bernoulli: p + ½ρv² = costante.'), file('Lezione 01.md', 'intro')])]);

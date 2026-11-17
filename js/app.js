@@ -1,15 +1,16 @@
-import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171513';
-import { Listener, speechSupported } from './speech.js?v=202611171513';
-import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171513';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, readNoteFull, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171513';
-import { buildSystem, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171513';
+import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171525';
+import { Listener, speechSupported } from './speech.js?v=202611171525';
+import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171525';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, readNoteFull, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171525';
+import { buildSystem, TONES, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171525';
 
-import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171513';
-import { LiveSession, pickLiveModels, LIVE_VOICES } from './live.js?v=202611171513';
-import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611171513';
-import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611171513';
-import { stripExt, isMarkdown, kindOf, extractText, fileToBase64, OCR_PROMPT, ACCEPT } from './docs.js?v=202611171513';
-import { dbGet, dbPut } from './db.js?v=202611171513';
+import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171525';
+import { LiveSession, pickLiveModels, LIVE_VOICES, previewVoice, DEFAULT_LIVE_VOICE, SAFE_LIVE_VOICE } from './live.js?v=202611171525';
+import { createOnboarding } from './onboarding.js?v=202611171525';
+import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611171525';
+import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611171525';
+import { stripExt, isMarkdown, kindOf, extractText, fileToBase64, OCR_PROMPT, ACCEPT } from './docs.js?v=202611171525';
+import { dbGet, dbPut } from './db.js?v=202611171525';
 
 const $ = (s) => document.querySelector(s);
 
@@ -23,10 +24,12 @@ const DEFAULTS = {
   voice: '',
   fallbacks: [], // modelli di riserva misurati con «Prova velocità modelli», dal più veloce
   liveModel: '', // modello Gemini Live preferito (vuoto = scelta automatica)
-  liveVoice: 'Kore',
+  liveVoice: DEFAULT_LIVE_VOICE,
+  tone: 'confidenziale', // confidenziale | equilibrato | professionale
+  onboarded: false, // presentazione iniziale completata
   liveModels: [], // modelli Live disponibili per la chiave
   annotate: true, // registra argomento, concetti ed errori dopo ogni risposta
-  profile: { university: '', degree: '', year: '', notes: '' }, // percorso di studi, per dare contesto a JARVIS
+  profile: { name: '', university: '', degree: '', year: '', notes: '' }, // percorso di studi, per dare contesto a JARVIS
   rate: 1.05,
   mute: false,
   autosend: true,
@@ -205,7 +208,7 @@ async function respond() {
         key: settings.key,
         model: settings.model || DEFAULTS.model,
         fast: settings.fast,
-        system: buildSystem({ mode, correction: settings.correction, note, vault: vaultInfo(), memory: studyMemory(), profile: settings.profile }),
+        system: buildSystem({ mode, correction: settings.correction, note, vault: vaultInfo(), memory: studyMemory(), profile: settings.profile, tone: settings.tone }),
         contents: modelHistory(),
         tools: vault.root ? VAULT_TOOLS : undefined,
         signal: ctrl.signal,
@@ -419,7 +422,7 @@ async function startLive() {
   connectLive(0);
 }
 
-async function connectLive(i) {
+async function connectLive(i, voice = settings.liveVoice) {
   const model = liveQueue[i];
   liveModelName = model;
   const kickoff = kickoffText();
@@ -429,8 +432,8 @@ async function connectLive(i) {
   const s = new LiveSession({
     key: settings.key,
     model,
-    voice: settings.liveVoice,
-    system: buildSystem({ mode, correction: settings.correction, note, vault: vaultInfo(), memory: studyMemory(), profile: settings.profile }) + LIVE_EXTRA,
+    voice,
+    system: buildSystem({ mode, correction: settings.correction, note, vault: vaultInfo(), memory: studyMemory(), profile: settings.profile, tone: settings.tone }) + LIVE_EXTRA,
     tools: vault.root ? VAULT_TOOLS : undefined,
     seed: liveSeed(),
     kickoff,
@@ -460,7 +463,10 @@ async function connectLive(i) {
       if (liveUserStopped) return;
       commitLiveUser();
       commitLiveBot();
-      if (!everConnected && i + 1 < liveQueue.length) {
+      if (!everConnected && voice !== SAFE_LIVE_VOICE && /voice|voce|speech/i.test(reason)) {
+        addBubble('info', `⏳ La voce ${voice} non è disponibile con ${model}: uso ${SAFE_LIVE_VOICE}.`, { transient: true });
+        connectLive(i, SAFE_LIVE_VOICE);
+      } else if (!everConnected && i + 1 < liveQueue.length) {
         addBubble('info', `⏳ ${model} non disponibile${reason ? ` (${reason})` : ''}: provo con ${liveQueue[i + 1]}.`, { transient: true });
         connectLive(i + 1);
       } else {
@@ -1088,13 +1094,17 @@ function fillLiveModels() {
 function openSettings() {
   $('#set-annotate').checked = settings.annotate !== false;
   const pr = settings.profile || {};
+  $('#set-name').value = pr.name || '';
+  $('#set-tone').replaceChildren(...Object.entries(TONES).map(([id, t]) => new Option(`${t.label} — ${t.desc}`, id)));
+  $('#set-tone').value = settings.tone || 'confidenziale';
+  $('#preview-status').textContent = '';
   $('#set-university').value = pr.university || '';
   $('#set-degree').value = pr.degree || '';
   $('#set-year').value = pr.year || '';
   $('#set-profile-notes').value = pr.notes || '';
   fillLiveModels();
-  $('#set-live-voice').replaceChildren(...LIVE_VOICES.map((v) => new Option(v, v)));
-  $('#set-live-voice').value = settings.liveVoice || 'Kore';
+  $('#set-live-voice').replaceChildren(...LIVE_VOICES.map((v) => new Option(`${v.name} — ${v.desc}`, v.name)));
+  $('#set-live-voice').value = settings.liveVoice || DEFAULT_LIVE_VOICE;
   $('#set-key').value = settings.key;
   $('#set-model').value = settings.model;
   $('#set-fast').checked = settings.fast;
@@ -1122,18 +1132,81 @@ function readSettingsForm() {
   settings.liveModel = $('#set-live-model').value;
   settings.annotate = $('#set-annotate').checked;
   settings.profile = {
+    name: $('#set-name').value.trim(),
     university: $('#set-university').value.trim(),
     degree: $('#set-degree').value.trim(),
     year: $('#set-year').value.trim(),
     notes: $('#set-profile-notes').value.trim(),
   };
   refreshStudy(true);
-  settings.liveVoice = $('#set-live-voice').value || 'Kore';
+  settings.liveVoice = $('#set-live-voice').value || DEFAULT_LIVE_VOICE;
+  settings.tone = $('#set-tone').value || 'confidenziale';
   saveSettings();
   applyVoiceSettings();
   updateModeHelp();
   updateStatus();
 }
+
+// ---------- Presentazione iniziale e voci ----------
+async function verifyKey(key) {
+  try {
+    const all = await listAllModels(key);
+    const lives = liveCandidates(all);
+    settings.liveModels = lives;
+    saveSettings();
+    return { ok: true, message: `Chiave valida ✓ — ${lives.length ? 'anche la voce dal vivo è disponibile' : 'la voce dal vivo non è disponibile con questa chiave'}.` };
+  } catch (err) {
+    return { ok: false, message: err.message || String(err) };
+  }
+}
+
+async function previewLiveVoice(voice, key = settings.key) {
+  let models = settings.liveModels;
+  if (!models?.length) {
+    models = liveCandidates(await listAllModels(key));
+    settings.liveModels = models;
+    saveSettings();
+  }
+  const model = pickLiveModels(models, settings.liveModel)[0];
+  if (!model) throw new Error('la tua chiave non ha modelli per la voce dal vivo');
+  const name = settings.profile?.name;
+  const text = settings.tone === 'professionale'
+    ? `Ciao${name ? ` ${name}` : ''}, sono JARVIS. Quando vuoi iniziamo il ripasso: tu esponi e io ti correggo.`
+    : `Ciao${name ? ` ${name}` : ''}! Sono JARVIS. Dai, quando vuoi ripassiamo insieme: tu mi racconti e io ti dico se fila tutto.`;
+  try {
+    await previewVoice({ key, model, voice, text });
+  } catch (err) {
+    if (/voice|speech/i.test(err.message)) throw new Error(`la voce ${voice} non è disponibile con ${model}`);
+    throw err;
+  }
+}
+
+const onboarding = createOnboarding({
+  settings: () => settings,
+  save: (patch) => {
+    Object.assign(settings, patch);
+    saveSettings();
+    updateStatus();
+  },
+  verifyKey,
+  previewVoice: previewLiveVoice,
+  pickFolder: async () => {
+    try {
+      const h = await pickVault();
+      return (await openVault(h)) ? h.name : null;
+    } catch {
+      return null;
+    }
+  },
+  folderName: () => vault.root?.name || '',
+  tones: TONES,
+  voices: LIVE_VOICES,
+  onFinish: () => {
+    const n = settings.profile?.name;
+    addBubble('info', `Tutto pronto${n ? `, ${n}` : ''}! Apri una lezione (o dimmi «apri …») e premi «Parla con JARVIS».`, { transient: true });
+    updateStatus();
+  },
+});
 
 // ---------- Collegamento dei pulsanti ----------
 function init() {
@@ -1356,8 +1429,24 @@ function init() {
   };
   $('#btn-save-summary').onclick = saveSummary;
 
-  if (!settings.key) {
-    addBubble('info', 'Benvenuto! Nelle impostazioni indica università e corso (così JARVIS sa a che livello parlarti) e incolla la tua chiave gratuita di Gemini.', { transient: true });
+  $('#btn-welcome').onclick = () => { $('#dlg-settings').close(); onboarding.open(); };
+  $('#btn-preview-voice').onclick = async () => {
+    const st = $('#preview-status');
+    const key = $('#set-key').value.trim() || settings.key;
+    if (!key) { st.textContent = 'Serve la chiave Gemini.'; return; }
+    st.textContent = 'Ascolta…';
+    try {
+      await previewLiveVoice($('#set-live-voice').value, key);
+      st.textContent = '';
+    } catch (err) {
+      st.textContent = `Anteprima non riuscita: ${err.message}`;
+    }
+  };
+
+  if (!settings.onboarded) {
+    onboarding.open();
+  } else if (!settings.key) {
+    addBubble('info', 'Manca la chiave gratuita di Gemini: incollala nelle impostazioni.', { transient: true });
     openSettings();
   }
 }
@@ -1380,7 +1469,7 @@ async function makeSummary() {
       model: settings.model || DEFAULTS.model,
       fast: false,
       timeoutMs: 40000,
-      system: buildSystem({ mode, correction: settings.correction, note, profile: settings.profile }),
+      system: buildSystem({ mode, correction: settings.correction, note, profile: settings.profile, tone: settings.tone }),
       contents: [...modelHistory(60), { role: 'user', parts: [{ text: summaryRequest(date) }] }],
     });
     $('#summary-text').value = text.trim();

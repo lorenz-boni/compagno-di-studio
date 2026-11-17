@@ -706,3 +706,23 @@ dialog:has(.wide) { width: min(780px, calc(100vw - 32px)); }
 .badge-pdf { color: #FF8A8A; }
 .badge-docx { color: #7DB3FF; }
 .badge-txt { color: var(--muted); }
+
+/* ---------- Presentazione iniziale ---------- */
+dialog.welcome { width: min(640px, calc(100vw - 32px)); }
+.wiz-head { display: flex; gap: 0.9rem; align-items: center; }
+.wiz-head .brand-logo { width: 52px; height: 52px; flex: none; }
+.wiz-head h2 { font-size: 1.35rem; letter-spacing: 0.02em; }
+.wiz-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; counter-reset: s; }
+.wiz-steps li { counter-increment: s; font-size: 0.78rem; color: var(--muted); border-top: 3px solid rgb(145 169 194 / 0.25); padding-top: 0.35rem; }
+.wiz-steps li::before { content: counter(s) " · "; }
+.wiz-steps li.done { color: var(--text); border-color: rgb(0 200 255 / 0.5); }
+.wiz-steps li[aria-current="step"] { color: var(--cyan); border-color: var(--cyan); font-weight: 600; }
+.wiz-pane { display: flex; flex-direction: column; gap: 0.7rem; min-height: 250px; }
+.wiz-pane h3 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; }
+.howto { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; }
+.tone-pick label.tone { flex-direction: row; align-items: flex-start; gap: 0.6rem; padding: 0.5rem 0.6rem; border: 1px solid var(--line); border-radius: var(--r-sm); cursor: pointer; }
+.tone-pick label.tone:has(input:checked) { border-color: var(--cyan); background: rgb(0 200 255 / 0.08); }
+.tone-pick input { width: auto; margin-top: 0.2rem; accent-color: var(--cyan); }
+.tone-pick .tone-desc { display: block; color: var(--muted); font-size: 0.82rem; }
+.ok-text { color: var(--ok) !important; }
+.err-text { color: var(--danger) !important; }

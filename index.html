@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=202611171513">
+  <link rel="stylesheet" href="styles.css?v=202611171525">
 </head>
 <body data-core="idle">
   <!-- Icone (stile lineare, disegnate qui: nessuna libreria esterna) -->
@@ -63,7 +63,7 @@
       </svg>
       <div class="brand-text">
         <span class="brand-name">JARVIS</span>
-        <span class="brand-sub">Compagno di studio <small id="app-version" class="version">v202611171513</small></span>
+        <span class="brand-sub">Compagno di studio <small id="app-version" class="version">v202611171525</small></span>
       </div>
     </div>
 
@@ -237,6 +237,76 @@
     </form>
   </footer>
 
+  <!-- Presentazione al primo avvio -->
+  <dialog id="dlg-welcome" class="welcome" aria-labelledby="wz-title">
+    <form method="dialog" class="dialog wizard">
+      <div class="wiz-head">
+        <svg class="brand-logo" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21" class="ring1"/><circle cx="24" cy="24" r="15" class="ring2"/><circle cx="24" cy="24" r="8" class="ring3"/></svg>
+        <div>
+          <h2 id="wz-title">Ciao, sono JARVIS</h2>
+          <p class="hint">Il tuo compagno di studio. Ti preparo tutto in un minuto: ogni passo si può saltare e cambiare dopo nelle impostazioni.</p>
+        </div>
+      </div>
+      <ol class="wiz-steps" aria-label="Passi">
+        <li data-step="1">Tu</li><li data-step="2">Chiave</li><li data-step="3">Voce</li><li data-step="4">Appunti</li>
+      </ol>
+
+      <section class="wiz-pane" data-step="1">
+        <h3>Il tuo percorso di studi</h3>
+        <p class="hint">Così ti spiego le cose al livello giusto, con la terminologia e gli esempi del tuo corso.</p>
+        <label>Come ti chiami? <input id="wz-name" placeholder="es. Lorenzo" autocomplete="given-name"></label>
+        <label>Università <input id="wz-university" placeholder="es. Politecnico di Milano" autocomplete="organization"></label>
+        <span class="row">
+          <label style="flex:2">Corso di laurea <input id="wz-degree" placeholder="es. Ingegneria per l'ambiente e il territorio"></label>
+          <label style="flex:1">Anno <input id="wz-year" placeholder="es. 1° anno magistrale"></label>
+        </span>
+        <label>Altro da sapere <textarea id="wz-notes" rows="2" placeholder="es. esame orale, il prof. chiede molte dimostrazioni; preferisco esempi pratici"></textarea></label>
+      </section>
+
+      <section class="wiz-pane" data-step="2" hidden>
+        <h3>La chiave gratuita di Gemini</h3>
+        <p class="hint">JARVIS usa l'intelligenza artificiale di Google. È gratis, serve solo una chiave personale (non condividerla).</p>
+        <ol class="howto">
+          <li>Apri <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> e accedi con il tuo account Google.</li>
+          <li>Premi <strong>Crea chiave API</strong> (meglio in un progetto nuovo, senza fatturazione).</li>
+          <li>Copia la chiave (inizia con <code>AIza</code>) e incollala qui sotto.</li>
+        </ol>
+        <label>Chiave API Gemini
+          <span class="row">
+            <input id="wz-key" type="password" autocomplete="off" placeholder="AIza…">
+            <button type="button" id="wz-check" class="btn-ghost small">Verifica</button>
+          </span>
+        </label>
+        <span class="hint" id="wz-key-status"></span>
+      </section>
+
+      <section class="wiz-pane" data-step="3" hidden>
+        <h3>Come vuoi che ti parli?</h3>
+        <fieldset class="tone-pick" id="wz-tones"><legend>Tono</legend></fieldset>
+        <label>Voce di JARVIS
+          <span class="row">
+            <select id="wz-voice"></select>
+            <button type="button" id="wz-listen" class="btn-ghost small">▶ Ascolta</button>
+          </span>
+        </label>
+        <span class="hint" id="wz-voice-status">La voce naturale è quella di «Parla con JARVIS». Il microfono classico usa la voce di Chrome, più meccanica.</span>
+      </section>
+
+      <section class="wiz-pane" data-step="4" hidden>
+        <h3>Dove sono i tuoi appunti?</h3>
+        <p class="hint">Scegli la cartella con i tuoi appunti: un vault Obsidian oppure una cartella qualsiasi con <strong>PDF, Word (.docx), Markdown o testo</strong>. I file restano sul tuo computer. Chrome chiederà il permesso: scegli <strong>«Consenti a ogni visita»</strong>.</p>
+        <button type="button" id="wz-folder" class="btn-primary">Collega cartella appunti</button>
+        <span class="hint" id="wz-folder-status"></span>
+      </section>
+
+      <div class="dialog-actions">
+        <button type="button" id="wz-back" class="btn-ghost">Indietro</button>
+        <button type="button" id="wz-skip" class="btn-ghost">Salta</button>
+        <button type="button" id="wz-next" class="btn-primary">Avanti</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Impostazioni -->
   <dialog id="dlg-settings">
     <form method="dialog" class="dialog">
@@ -244,6 +314,7 @@
       <fieldset>
         <legend>Il tuo percorso di studi</legend>
         <p class="hint">JARVIS lo usa per adattare livello, terminologia ed esempi. Tutto facoltativo, resta solo in questo browser.</p>
+        <label>Come ti chiami? <input id="set-name" placeholder="es. Lorenzo" autocomplete="given-name"></label>
         <label>Università <input id="set-university" placeholder="es. Politecnico di Milano" autocomplete="organization"></label>
         <span class="row">
           <label style="flex:2">Corso di laurea <input id="set-degree" placeholder="es. Ingegneria per l'ambiente e il territorio"></label>
@@ -284,14 +355,22 @@
       <label><span>Velocità voce: <output id="out-rate"></output></span>
         <input id="set-rate" type="range" min="0.7" max="1.6" step="0.05">
       </label>
+      <label>Tono di JARVIS
+        <select id="set-tone"></select>
+      </label>
+
       <fieldset>
         <legend>Parla con JARVIS (dal vivo)</legend>
         <label>Modello Live
           <select id="set-live-model"></select>
         </label>
         <label>Voce dal vivo
-          <select id="set-live-voice"></select>
+          <span class="row">
+            <select id="set-live-voice"></select>
+            <button type="button" id="btn-preview-voice" class="btn-ghost small">▶ Ascolta</button>
+          </span>
         </label>
+        <span class="hint" id="preview-status"></span>
         <p class="hint">L'elenco dei modelli si aggiorna con «Prova velocità modelli».</p>
       </fieldset>
 
@@ -300,6 +379,8 @@
       <label class="check"><input id="set-autosend" type="checkbox"> Invia da solo il testo dettato con Wispr Flow</label>
 
       <label class="check"><input id="set-annotate" type="checkbox"> Registra i progressi (argomento, concetti, errori): una richiesta in più a Gemini dopo ogni risposta</label>
+
+      <button type="button" id="btn-welcome" class="btn-ghost">↺ Rivedi la presentazione iniziale</button>
 
       <div class="dialog-actions">
         <button type="button" id="btn-test-voice" class="btn-ghost">🔊 Prova voce</button>
@@ -367,6 +448,6 @@
       document.head.appendChild(l);
     });
   </script>
-  <script type="module" src="js/app.js?v=202611171513"></script>
+  <script type="module" src="js/app.js?v=202611171525"></script>
 </body>
 </html>

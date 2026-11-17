@@ -25,7 +25,7 @@ const srv = http.createServer((req, res) => {
     await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream', 'access-control-allow-origin': '*' }, body: sse });
   });
   await page.addInitScript(() => {
-    localStorage.setItem('compagno.settings', JSON.stringify({ annotate: false, key: 'TEST', pause: 1 }));
+    localStorage.setItem('compagno.settings', JSON.stringify({ onboarded: true, annotate: false, key: 'TEST', pause: 1 }));
     class FakeRec { start() { window.__rec = this; } stop() { this.onend && this.onend(); } }
     window.webkitSpeechRecognition = FakeRec; window.SpeechRecognition = FakeRec;
     window.__say = (t) => window.__rec.onresult({ resultIndex: 0, results: [Object.assign([{ transcript: t }], { isFinal: true })] });

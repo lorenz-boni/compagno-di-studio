@@ -18,7 +18,7 @@ const serve = require('./_server.cjs');
     await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: 'Giusto, vai avanti.' }] } }] })}\n\n` });
   });
   await page.addInitScript(() => {
-    localStorage.setItem('compagno.settings', JSON.stringify({ annotate: false, key: 'TEST', mute: true }));
+    localStorage.setItem('compagno.settings', JSON.stringify({ onboarded: true, annotate: false, key: 'TEST', mute: true }));
     class FakeRec { start() { window.__rec = this; } stop() { this.onend && this.onend(); } }
     window.webkitSpeechRecognition = FakeRec; window.SpeechRecognition = FakeRec;
   });
@@ -68,7 +68,7 @@ const serve = require('./_server.cjs');
   // --- Smartphone ---
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   phone.on('pageerror', (e) => errors.push(e.message));
-  await phone.addInitScript(() => localStorage.setItem('compagno.settings', JSON.stringify({ annotate: false, key: 'TEST', mute: true })));
+  await phone.addInitScript(() => localStorage.setItem('compagno.settings', JSON.stringify({ onboarded: true, annotate: false, key: 'TEST', mute: true })));
   await phone.goto('http://localhost:8772/');
   ok(!(await phone.isVisible('#library')) && !(await phone.isVisible('#context-panel')), 'smartphone: pannelli chiusi all\'avvio');
   ok(await phone.isVisible('#btn-live') && await phone.isVisible('#core'), 'smartphone: nucleo e "Parla con JARVIS" visibili');
