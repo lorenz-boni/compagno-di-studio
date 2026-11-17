@@ -6,6 +6,12 @@ partendo dai TUOI appunti (PDF, Word, Markdown/Obsidian). Puoi anche farti spieg
 appunti o farti interrogare. È gratis.
 
 
+PREFERISCI FARTI GUIDARE?
+-------------------------
+Carica «Guida per AI (Claude, ChatGPT, Gemini).pdf» nella chat della tua AI e scrivi:
+«Aiutami a installare e usare JARVIS seguendo questo documento». Ti guida passo passo.
+
+
 COSA TI SERVE
 -------------
 - Google Chrome (su Windows o Mac). Edge e Safari hanno problemi con il microfono.

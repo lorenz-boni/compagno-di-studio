@@ -76,6 +76,7 @@ La voce naturale è quella di **Parla con JARVIS** (Gemini Live). Il microfono c
 ## Condividerla con un amico
 
 - **Il link**: https://lorenz-boni.github.io/compagno-di-studio/. Ognuno usa la sua chiave Gemini e i suoi appunti.
+- **La guida per un'AI**: https://lorenz-boni.github.io/compagno-di-studio/download/JARVIS-guida-per-AI.pdf. Caricata in Claude, ChatGPT o Gemini, l'AI guida passo passo installazione, chiave, voce, cartella e problemi frequenti. Si rigenera con `node tools/make-guide.cjs` da `share/guida-ai.html`.
 - **Il pacchetto da scaricare**: https://lorenz-boni.github.io/compagno-di-studio/download/JARVIS-compagno-di-studio.zip. Contiene l'app, la guida `LEGGIMI.txt` e gli avviatori per Windows (`.cmd`, che usa PowerShell già presente in Windows) e Mac (`.command`, che usa python3). L'app gira in locale su `http://localhost:8777`. Si rigenera con `tools/make-zip.sh`.
 
 ## Costi e privacy

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>JARVIS · Istruzioni per l'assistente AI</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+  * { box-sizing: border-box; }
+  body { font: 10.4pt/1.45 "Inter", "Segoe UI", system-ui, sans-serif; color: #102033; margin: 0; }
+  h1 { font-size: 20pt; margin: 0 0 2mm; color: #031a33; letter-spacing: 0.02em; }
+  h2 { font-size: 13pt; margin: 6mm 0 2mm; color: #0a4fa8; border-bottom: 1.5px solid #00C8FF; padding-bottom: 1mm; page-break-after: avoid; }
+  h3 { font-size: 11pt; margin: 4mm 0 1.5mm; color: #031a33; page-break-after: avoid; }
+  p { margin: 0 0 2mm; }
+  ul, ol { margin: 0 0 2mm; padding-left: 6mm; }
+  li { margin: 0 0 1mm; }
+  code, .k { font-family: "Consolas", "SFMono-Regular", monospace; font-size: 9.4pt; background: #eef5fc; padding: 0 1mm; border-radius: 1mm; }
+  .banner { background: #030B16; color: #EAF4FF; border-radius: 3mm; padding: 5mm 6mm; margin-bottom: 4mm; }
+  .banner h1 { color: #EAF4FF; }
+  .banner .sub { color: #91A9C2; }
+  .banner .cyan { color: #00C8FF; font-weight: 700; }
+  .how { background: #e8f7ff; border: 1px solid #9fdcff; border-radius: 2.5mm; padding: 3mm 4mm; margin: 0 0 3mm; }
+  .ai { border-left: 3px solid #1677FF; padding: 1mm 0 1mm 4mm; margin: 2mm 0 3mm; }
+  table { width: 100%; border-collapse: collapse; margin: 1mm 0 3mm; font-size: 9.6pt; }
+  th, td { border: 1px solid #cfdbe8; padding: 1.4mm 2mm; vertical-align: top; text-align: left; }
+  th { background: #eef5fc; }
+  .warn { background: #fff6e6; border: 1px solid #ffd28a; border-radius: 2.5mm; padding: 2.5mm 4mm; margin: 2mm 0 3mm; }
+  .avoid { page-break-inside: avoid; }
+  .small { font-size: 9pt; color: #44576b; }
+</style>
+</head>
+<body>
+
+<div class="banner">
+  <h1>JARVIS · Compagno di studio</h1>
+  <div class="sub">Istruzioni per l'assistente AI (Claude, ChatGPT, Gemini…) che ti guiderà nell'installazione e nel primo uso.</div>
+</div>
+
+<div class="how">
+  <strong>Per te che hai ricevuto questo file:</strong> carica questo PDF nella chat della tua AI preferita
+  (Claude, ChatGPT, Gemini…) e scrivi: <em>«Aiutami a installare e usare JARVIS seguendo questo documento.»</em>
+  L'AI ti guiderà un passo alla volta. Tieni a portata di mano il computer con Google Chrome.
+</div>
+
+<h2>1. Istruzioni per l'AI (leggile e seguile)</h2>
+<div class="ai">
+<p>Sei l'assistente che guida una persona, di solito uno studente universitario, a installare e usare <strong>JARVIS · Compagno di studio</strong>, un'app web gratuita. Segui queste regole:</p>
+<ol>
+  <li><strong>Parla in italiano</strong>, con tono amichevole e semplice. Non dare per scontate conoscenze tecniche.</li>
+  <li><strong>Un passo alla volta.</strong> Dai al massimo 2-3 azioni per messaggio, poi chiedi conferma («Fatto?») prima di proseguire.</li>
+  <li>Per prima cosa chiedi: <em>che computer usa (Windows o Mac)</em>, <em>se ha Google Chrome</em> e <em>dove tiene gli appunti</em> (PDF, Word, Obsidian, altro).</li>
+  <li>Proponi il <strong>metodo A (il link)</strong>, che è il più semplice e si aggiorna da solo. Passa al metodo B (copia sul computer) solo se lo chiede o se il link non funziona, e al C (copia su GitHub) solo se vuole modificare l'app.</li>
+  <li><strong>Non chiedere mai di incollare in chat la chiave Gemini.</strong> Va incollata solo dentro JARVIS. Se la persona la incolla in chat, consigliale di eliminarla su aistudio.google.com/apikey e di crearne una nuova.</li>
+  <li>Se qualcosa non va, chiedi uno <strong>screenshot</strong> e usa la sezione «Problemi frequenti». Non inventare pulsanti o funzioni che non sono descritti qui. Se non sai la risposta, dillo.</li>
+  <li>Alla fine fai fare una <strong>prima prova di studio</strong> (sezione 5) e ricorda i consigli finali.</li>
+</ol>
+</div>
+
+<h2>2. Che cos'è JARVIS</h2>
+<ul>
+  <li>Un assistente vocale per studiare. Gli racconti una lezione e lui ti ascolta e ti corregge, partendo dai <strong>tuoi appunti</strong>. Può anche spiegarti gli appunti sezione per sezione o interrogarti.</li>
+  <li>Modalità: <strong>Spiegami</strong> (te lo spiega), <strong>Te lo racconto</strong> (lo racconti tu e lui corregge), <strong>Interrogami</strong>, <strong>Chiacchiera</strong>.</li>
+  <li>Legge appunti in <strong>PDF, Word (.docx), Markdown/Obsidian e testo</strong>. Anche i PDF scansionati, trascritti una volta da Gemini.</li>
+  <li>Usa l'intelligenza artificiale <strong>Gemini di Google</strong> con una chiave personale <strong>gratuita</strong>.</li>
+  <li><strong>Privacy:</strong> chiave, impostazioni e conversazioni restano nel browser della persona. Non c'è un server dell'app. Gli appunti restano sul computer e a Gemini arriva solo il testo della lezione aperta. Nel piano gratuito Google può usare i testi per migliorare i servizi: meglio non inserire dati sensibili.</li>
+  <li><strong>Serve:</strong> computer Windows o Mac con <strong>Google Chrome</strong> (Edge e Safari hanno problemi con il microfono), un account Google e, consigliate, delle cuffie con microfono.</li>
+</ul>
+
+<h2>3. Installazione</h2>
+
+<h3>Metodo A · Il link (consigliato)</h3>
+<ol>
+  <li>Apri <strong>Google Chrome</strong> e vai su <span class="k">https://lorenz-boni.github.io/compagno-di-studio/</span></li>
+  <li>Per averla come app con l'icona sul desktop: clicca l'icona di installazione a destra nella barra degli indirizzi (un monitor con una freccia), oppure il menu <strong>⋮ → Trasmetti, salva e condividi → Installa pagina come app…</strong>, poi <strong>Installa</strong>.</li>
+  <li>JARVIS si apre in una sua finestra e parte la presentazione iniziale (sezione 4).</li>
+</ol>
+
+<h3>Metodo B · Una copia sul proprio computer</h3>
+<ol>
+  <li>Scarica <span class="k">https://lorenz-boni.github.io/compagno-di-studio/download/JARVIS-compagno-di-studio.zip</span></li>
+  <li>Estrai lo ZIP in una cartella che non sposterai più (es. <em>Documenti\JARVIS</em>).</li>
+  <li><strong>Windows:</strong> doppio clic su <em>«Avvia JARVIS (Windows).cmd»</em>. Se compare «PC protetto da Windows»: <em>Ulteriori informazioni → Esegui comunque</em>. Se non parte: tasto destro sul file → <em>Proprietà</em> → spunta <em>Sblocca</em> → OK, e riprova.</li>
+  <li><strong>Mac:</strong> tasto destro su <em>«Avvia JARVIS (Mac).command»</em> → <em>Apri</em> → <em>Apri</em>. Se macOS propone di installare gli «Strumenti da riga di comando», accetta e poi riapri il file.</li>
+  <li>Si apre una finestra nera, da lasciare aperta mentre studi, e JARVIS in Chrome su <span class="k">http://localhost:8777</span>. Per spegnere JARVIS basta chiudere la finestra nera.</li>
+</ol>
+<p class="small">Con il metodo B l'app non si aggiorna da sola: per una versione nuova si riscarica lo ZIP. I dati restano legati all'indirizzo localhost:8777.</p>
+
+<h3>Metodo C · Una copia online tutta propria (solo per chi vuole modificarla)</h3>
+<ol>
+  <li>Crea un account gratuito su github.com, vai su <span class="k">https://github.com/lorenz-boni/compagno-di-studio</span> e premi <strong>Fork</strong>.</li>
+  <li>Nel tuo fork: <em>Settings → Pages → Deploy from a branch → main / (root) → Save</em>. Dopo un paio di minuti l'app è su <span class="k">https://NOME-UTENTE.github.io/compagno-di-studio/</span></li>
+</ol>
+
+<h2>4. Primo avvio: la presentazione in 4 passi</h2>
+<p>Ogni passo si può saltare e cambiare dopo da <strong>⚙️ Impostazioni</strong> (in alto a destra), dove c'è anche «Rivedi la presentazione iniziale».</p>
+<ol>
+  <li><strong>Tu:</strong> nome, università, corso di laurea, anno e note libere (es. «esame orale»). Servono a JARVIS per parlare al livello giusto.</li>
+  <li><strong>Chiave Gemini:</strong>
+    <ul>
+      <li>vai su <span class="k">https://aistudio.google.com/apikey</span> e accedi con l'account Google;</li>
+      <li>premi <strong>Crea chiave API</strong>. Se chiede un progetto, conviene <strong>crearne uno nuovo</strong> (es. «jarvis»), così la quota gratuita non si divide con altre app e non ci sono costi;</li>
+      <li>copia la chiave (inizia con <span class="k">AIza</span>), incollala nel campo di JARVIS e premi <strong>Verifica</strong>: deve comparire «Chiave valida ✓».</li>
+    </ul>
+  </li>
+  <li><strong>Voce:</strong> scegli il <strong>tono</strong> (Confidenziale, Equilibrato o Professionale) e una delle <strong>8 voci</strong>: Il compagno di corso, La voce calda, Il narratore, La tutor paziente, L'amico rilassato, La voce leggera, L'energico, La prof. Il pulsante ▶ fa sentire ogni voce.</li>
+  <li><strong>Appunti:</strong> premi <strong>Collega cartella appunti</strong> e scegli la cartella <em>principale</em> degli appunti (un vault Obsidian o una cartella qualsiasi con PDF/Word). Nella finestra di Windows si vedono solo le cartelle, è normale: entra nella cartella e premi <em>Seleziona cartella</em>. Quando Chrome chiede il permesso scegli <strong>«Consenti a ogni visita»</strong>, così le volte successive la cartella si ricollega da sola.</li>
+</ol>
+
+<h2>5. Prima prova di studio</h2>
+<ol>
+  <li>A sinistra, nella <strong>Libreria</strong>, apri una materia e clicca una lezione. Oppure, dopo aver premuto il pulsante principale, dillo a voce: «apri Fisica 1, lezione 3».</li>
+  <li>In alto scegli la modalità, per esempio <strong>Spiegami</strong> per farsi rispiegare la lezione o <strong>Te lo racconto</strong> per ripeterla.</li>
+  <li>Premi <strong>Parla con JARVIS</strong> in basso a sinistra. Quando Chrome chiede il microfono: <strong>Consenti</strong>. Poi parla normalmente: risponde a voce e si può interrompere.</li>
+  <li>Alla fine premi <strong>Facciamo il punto</strong> per un resoconto. Nel pannello a destra ci sono argomento, concetti chiari, da consolidare ed errori. Le conversazioni si salvano da sole (scheda <em>Cronologia</em>).</li>
+</ol>
+<p><strong>Consigli finali:</strong> usare le cuffie; se è lento, ⚙️ Impostazioni → <em>Prova velocità modelli</em>; non condividere mai la propria chiave Gemini.</p>
+
+<h2 class="avoid">6. Problemi frequenti</h2>
+<table class="avoid">
+  <tr><th style="width:36%">Cosa succede</th><th>Cosa fare</th></tr>
+  <tr><td>Il microfono non funziona o «permesso negato»</td><td>Clicca il lucchetto a sinistra dell'indirizzo → Microfono → Consenti, poi ricarica. Usa Chrome, non Edge o Safari.</td></tr>
+  <tr><td>«Chiave non valida» o errore 400/403</td><td>Ricopia la chiave da aistudio.google.com/apikey (intera, senza spazi) in ⚙️ Impostazioni.</td></tr>
+  <tr><td>Risponde lentamente, «sovraccarico» o errore 503</td><td>Sono i server di Google sotto carico. ⚙️ Impostazioni → <em>Prova velocità modelli</em> → Salva: sceglie da sola il modello più veloce (di solito un «lite»). JARVIS passa comunque da solo ai modelli di riserva.</td></tr>
+  <tr><td>«Quota finita» o errore 429</td><td>La quota gratuita è finita per ora: aspettare un po' (si rinnova) o usare un altro modello con <em>Prova velocità modelli</em>.</td></tr>
+  <tr><td>Una voce dice «non disponibile»</td><td>Quella voce non è supportata dai modelli della chiave: sceglierne un'altra. Il narratore, L'energico e La prof funzionano con tutti i modelli.</td></tr>
+  <tr><td>La cartella risulta vuota o con sole immagini</td><td>È stata scelta una sottocartella sbagliata: «Cambia cartella» e scegliere quella principale degli appunti. Sono letti PDF, .docx, .md e .txt. I vecchi .doc vanno salvati come .docx da Word.</td></tr>
+  <tr><td>PDF che dà «scansione senza testo»</td><td>Normale: JARVIS lo fa trascrivere a Gemini una volta sola (serve la chiave, massimo 18 MB per file).</td></tr>
+  <tr><td>Windows: la finestra nera si chiude subito</td><td>Tasto destro sul file .cmd → Proprietà → Sblocca. Se resta un errore, fare uno screenshot. In alternativa usare il metodo A (link).</td></tr>
+  <tr><td>«La porta 8777 è già in uso»</td><td>JARVIS è già acceso in un'altra finestra: usare quella, oppure chiuderla e riavviare.</td></tr>
+  <tr><td>Barra rossa «Errore…» in cima</td><td>Ricaricare con <strong>Ctrl+F5</strong> (Mac: Cmd+Shift+R). Se resta, fare uno screenshot del messaggio.</td></tr>
+  <tr><td>L'icona sul desktop è vecchia</td><td>Eliminare il vecchio collegamento e reinstallare l'app dal metodo A, punto 2.</td></tr>
+</table>
+
+<p class="small">JARVIS · Compagno di studio — progetto personale gratuito. Codice: github.com/lorenz-boni/compagno-di-studio</p>
+</body>
+</html>
