@@ -1,0 +1,219 @@
+// Conversazione dal vivo con Gemini Live (voce in tempo reale), via WebSocket direttamente dal browser.
+// Approccio ispirato a addyosmani/jarvis (Apache-2.0): microfono 16 kHz PCM in ingresso, audio 24 kHz in uscita.
+
+const WS_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
+
+// Ordine di preferenza: prima i modelli stabili, poi le anteprime.
+export const LIVE_PREFERENCE = [
+  'gemini-2.5-flash-native-audio-latest',
+  'gemini-3.1-flash-live-preview',
+  'gemini-3.8-live',
+  'gemini-2.5-flash-native-audio-preview-12-2025',
+  'gemini-2.5-flash-native-audio-preview-09-2025',
+];
+export const LIVE_VOICES = ['Kore', 'Aoede', 'Leda', 'Zephyr', 'Puck', 'Charon', 'Fenrir', 'Orus'];
+
+/** Ordina i modelli Live disponibili: quello scelto, poi le preferenze, poi gli altri adatti. */
+export function pickLiveModels(available, chosen) {
+  const usable = available.filter((m) => !/(transcribe|translate|robotics|extended-thinking)/.test(m));
+  const out = [];
+  if (chosen && usable.includes(chosen)) out.push(chosen);
+  for (const m of LIVE_PREFERENCE) if (usable.includes(m) && !out.includes(m)) out.push(m);
+  for (const m of usable) if (!out.includes(m)) out.push(m);
+  return out;
+}
+
+function toBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+function fromBase64(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+export class LiveSession {
+  /**
+   * opts: { key, model, system, tools, voice, seed (turni testuali precedenti), kickoff (testo per farlo iniziare),
+   *         onState(state), onUserText(t), onModelText(t), onTurnComplete(), onInterrupted(),
+   *         onSpeaking(bool), onToolCall(fc) → risposta, onError(msg), onClosed(info) }
+   */
+  constructor(opts) {
+    this.o = opts;
+    this.stopped = false;
+    this.connected = false; // setup completato almeno una volta
+    this.handle = null; // per riprendere la sessione dopo una disconnessione
+    this.reconnects = 0;
+    this.sources = new Set();
+    this.nextTime = 0;
+  }
+
+  async start() {
+    this.o.onState?.('connecting');
+    this.stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+    });
+    this.inCtx = new AudioContext({ sampleRate: 16000 });
+    await this.inCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611171143', import.meta.url));
+    const src = this.inCtx.createMediaStreamSource(this.stream);
+    this.node = new AudioWorkletNode(this.inCtx, 'pcm-capture');
+    this.node.port.onmessage = (e) => this.#sendAudio(e.data);
+    const mute = this.inCtx.createGain();
+    mute.gain.value = 0;
+    src.connect(this.node).connect(mute).connect(this.inCtx.destination);
+    this.outCtx = new AudioContext({ sampleRate: 24000 });
+    this.#open();
+  }
+
+  #open() {
+    const ws = new WebSocket(`${WS_URL}?key=${encodeURIComponent(this.o.key)}`);
+    ws.binaryType = 'arraybuffer';
+    this.ws = ws;
+    this.ready = false;
+    ws.onopen = () => {
+      const setup = {
+        model: `models/${this.o.model}`,
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: this.o.voice || 'Kore' } } },
+        },
+        systemInstruction: { parts: [{ text: this.o.system }] },
+        inputAudioTranscription: {},
+        outputAudioTranscription: {},
+        contextWindowCompression: { slidingWindow: {} },
+        sessionResumption: this.handle ? { handle: this.handle } : {},
+      };
+      if (this.o.tools) setup.tools = this.o.tools;
+      ws.send(JSON.stringify({ setup }));
+    };
+    ws.onmessage = (e) => {
+      let msg;
+      try {
+        msg = JSON.parse(typeof e.data === 'string' ? e.data : new TextDecoder().decode(e.data));
+      } catch {
+        return;
+      }
+      this.#handle(msg);
+    };
+    ws.onclose = (e) => {
+      if (this.ws !== ws) return;
+      this.ready = false;
+      if (this.stopped) return;
+      // Fine sessione normale da parte di Google (es. limite di durata): ci ricolleghiamo riprendendo da dove eravamo.
+      if (this.connected && this.handle && this.reconnects < 5) {
+        this.reconnects++;
+        this.o.onState?.('reconnecting');
+        setTimeout(() => !this.stopped && this.#open(), 300);
+        return;
+      }
+      this.o.onClosed?.({ code: e.code, reason: e.reason || '', everConnected: this.connected });
+      this.stop();
+    };
+  }
+
+  async #handle(msg) {
+    if (msg.setupComplete) {
+      const first = !this.connected;
+      this.connected = true;
+      this.ready = true;
+      this.reconnects = 0;
+      this.o.onState?.('connected');
+      if (first) {
+        const seed = (this.o.seed || []).filter((t) => t.parts?.length);
+        if (seed.length) this.#send({ clientContent: { turns: seed, turnComplete: false } });
+        if (this.o.kickoff) this.sendText(this.o.kickoff);
+      }
+      return;
+    }
+    if (msg.sessionResumptionUpdate?.newHandle && msg.sessionResumptionUpdate.resumable !== false) {
+      this.handle = msg.sessionResumptionUpdate.newHandle;
+    }
+    if (msg.toolCall?.functionCalls) {
+      const functionResponses = [];
+      for (const fc of msg.toolCall.functionCalls) {
+        let response;
+        try { response = await this.o.onToolCall?.(fc); } catch (err) { response = { errore: err.message }; }
+        functionResponses.push({ id: fc.id, name: fc.name, response: response || { ok: true } });
+      }
+      this.#send({ toolResponse: { functionResponses } });
+    }
+    const sc = msg.serverContent;
+    if (sc) {
+      if (sc.interrupted) {
+        this.#stopPlayback();
+        this.o.onInterrupted?.();
+      }
+      if (sc.inputTranscription?.text) this.o.onUserText?.(sc.inputTranscription.text);
+      if (sc.outputTranscription?.text) this.o.onModelText?.(sc.outputTranscription.text);
+      for (const p of sc.modelTurn?.parts || []) {
+        if (p.inlineData?.data && /audio/.test(p.inlineData.mimeType || 'audio')) this.#play(p.inlineData.data);
+      }
+      if (sc.turnComplete) this.o.onTurnComplete?.();
+    }
+  }
+
+  #send(obj) {
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(obj));
+  }
+
+  #sendAudio(buffer) {
+    if (!this.ready) return;
+    this.#send({ realtimeInput: { audio: { data: toBase64(buffer), mimeType: 'audio/pcm;rate=16000' } } });
+  }
+
+  sendText(text) {
+    this.#send({ clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true } });
+  }
+
+  #play(b64) {
+    const ctx = this.outCtx;
+    if (!ctx) return;
+    const bytes = fromBase64(b64);
+    const pcm = new Int16Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 2));
+    const buf = ctx.createBuffer(1, pcm.length, 24000);
+    const ch = buf.getChannelData(0);
+    for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    this.nextTime = Math.max(this.nextTime, ctx.currentTime + 0.02);
+    src.start(this.nextTime);
+    this.nextTime += buf.duration;
+    if (!this.sources.size) this.o.onSpeaking?.(true);
+    this.sources.add(src);
+    src.onended = () => {
+      this.sources.delete(src);
+      if (!this.sources.size) this.o.onSpeaking?.(false);
+    };
+  }
+
+  #stopPlayback() {
+    for (const s of this.sources) {
+      try { s.stop(); } catch { /* già finito */ }
+    }
+    this.sources.clear();
+    this.nextTime = 0;
+    this.o.onSpeaking?.(false);
+  }
+
+  /** Zittisce la risposta in corso (senza chiudere la chiamata). */
+  silence() {
+    this.#stopPlayback();
+  }
+
+  stop() {
+    if (this.stopped) return;
+    this.stopped = true;
+    this.#stopPlayback();
+    try { this.ws?.close(1000); } catch { /* già chiuso */ }
+    this.stream?.getTracks().forEach((t) => t.stop());
+    this.inCtx?.close().catch(() => {});
+    this.outCtx?.close().catch(() => {});
+    this.o.onState?.('closed');
+  }
+}

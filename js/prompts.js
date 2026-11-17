@@ -91,6 +91,8 @@ export function buildSystem({ mode, correction, note, vault }) {
 export const FINISHED_PREFIX = '[L\'utente ha finito di raccontare. Ecco tutta la sua esposizione:]\n';
 
 export const START_QUIZ = '[Inizia pure l\'interrogazione con la prima domanda.]';
+export const LIVE_EXTRA = `\n\nSTAI PARLANDO A VOCE IN TEMPO REALE, come in una telefonata. Parla sempre in italiano, con il tono naturale di un compagno di corso. L'utente può interromperti: se lo fa, fermati e ascoltalo. Non pronunciare mai simboli, percorsi di file, estensioni o parentesi: di' solo il nome della lezione. Se apri una nota con gli strumenti, il suo testo ti arriva nella risposta dello strumento (campo "testo"): da quel momento usalo come appunti.`;
+
 export const START_EXPLAIN = '[Inizia a spiegarmi gli appunti dalla prima sezione.]';
 
 export function summaryRequest(date) {

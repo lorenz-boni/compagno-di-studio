@@ -6,17 +6,18 @@
   <title>Compagno di studio</title>
   <meta name="description" content="Un compagno di corso vocale che ti ascolta ripetere e ti corregge, partendo dai tuoi appunti Obsidian.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>">
-  <link rel="stylesheet" href="styles.css?v=202611171131">
+  <link rel="stylesheet" href="styles.css?v=202611171143">
 </head>
 <body>
   <header class="topbar">
-    <h1>🎓 Compagno di studio <small id="app-version" class="version">v202611171131</small></h1>
+    <h1>🎓 Compagno di studio <small id="app-version" class="version">v202611171143</small></h1>
     <nav class="modes" role="tablist" aria-label="Modalità">
       <button role="tab" data-mode="spiegami" aria-selected="false">Spiegami</button>
       <button role="tab" data-mode="racconto" aria-selected="true">Te lo racconto</button>
       <button role="tab" data-mode="interrogami" aria-selected="false">Interrogami</button>
       <button role="tab" data-mode="libera" aria-selected="false">Chiacchiera</button>
     </nav>
+    <button id="btn-toggle-sessions" class="ghost" title="Mostra o nascondi le conversazioni">🗂️ Conversazioni</button>
     <button id="btn-settings" class="ghost" title="Impostazioni">⚙️ Impostazioni</button>
   </header>
 
@@ -53,11 +54,12 @@
       <div class="status" id="status">Pronto.</div>
 
       <div class="controls">
+        <button id="btn-live" class="live-btn" aria-pressed="false" title="Conversazione vocale in tempo reale con Gemini Live">📞 Dal vivo</button>
         <button id="btn-mic" class="mic" aria-pressed="false">🎙️ Inizia a parlare</button>
         <button id="btn-done">✅ Ho finito</button>
         <button id="btn-stop-voice" class="ghost" title="Zittisci il compagno">🔇 Silenzio</button>
         <button id="btn-summary" class="ghost">📝 Facciamo il punto</button>
-        <button id="btn-reset" class="ghost">🗑️ Nuova sessione</button>
+        <button id="btn-reset" class="ghost">＋ Nuova conversazione</button>
       </div>
 
       <form id="text-form" class="text-form">
@@ -65,6 +67,15 @@
         <button type="submit">Invia</button>
       </form>
     </main>
+
+    <aside class="sessions" aria-label="Conversazioni">
+      <div class="sessions-head">
+        <h2>Conversazioni</h2>
+        <button id="btn-new-session" class="small">＋ Nuova</button>
+      </div>
+      <div id="session-list" class="session-list"></div>
+      <p class="hint">Si salvano da sole: nel browser e, con il vault collegato, anche in <code>.compagno/sessioni</code>.</p>
+    </aside>
   </div>
 
   <!-- Impostazioni -->
@@ -103,6 +114,17 @@
       <label><span>Velocità voce: <output id="out-rate"></output></span>
         <input id="set-rate" type="range" min="0.7" max="1.6" step="0.05">
       </label>
+      <fieldset>
+        <legend>📞 Conversazione dal vivo</legend>
+        <label>Modello Live
+          <select id="set-live-model"></select>
+        </label>
+        <label>Voce dal vivo
+          <select id="set-live-voice"></select>
+        </label>
+        <p class="hint">L'elenco dei modelli si aggiorna con «Prova velocità modelli».</p>
+      </fieldset>
+
       <label class="check"><input id="set-mute" type="checkbox"> Solo testo (non leggere le risposte)</label>
 
       <label class="check"><input id="set-autosend" type="checkbox"> Invia da solo il testo dettato con Wispr Flow</label>
@@ -159,6 +181,6 @@
       window.addEventListener('unhandledrejection', function (e) { show((e.reason && e.reason.message) || String(e.reason)); });
     })();
   </script>
-  <script type="module" src="js/app.js?v=202611171131"></script>
+  <script type="module" src="js/app.js?v=202611171143"></script>
 </body>
 </html>

@@ -1,3 +1,5 @@
+import { dbGet, dbPut } from './db.js?v=202611171143';
+
 // Accesso diretto alla cartella del vault Obsidian con la File System Access API (Chrome/Edge su PC).
 
 export const vaultSupported = 'showDirectoryPicker' in window;
@@ -75,33 +77,12 @@ export async function appendToNote(root, path, addition) {
 
 // --- Ricordare l'ultimo vault aperto (IndexedDB, solo in questo browser) ---
 
-function db() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open('compagno-di-studio', 1);
-    req.onupgradeneeded = () => req.result.createObjectStore('kv');
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
 export async function saveVaultHandle(handle) {
-  try {
-    const d = await db();
-    d.transaction('kv', 'readwrite').objectStore('kv').put(handle, 'vault');
-  } catch { /* non indispensabile */ }
+  try { await dbPut('kv', handle, 'vault'); } catch { /* non indispensabile */ }
 }
 
 export async function loadVaultHandle() {
-  try {
-    const d = await db();
-    return await new Promise((resolve) => {
-      const req = d.transaction('kv').objectStore('kv').get('vault');
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => resolve(null);
-    });
-  } catch {
-    return null;
-  }
+  try { return await dbGet('kv', 'vault'); } catch { return null; }
 }
 
 // --- Ricerca delle note per nome (es. "fluidodinamica 1 lezione tre") ---

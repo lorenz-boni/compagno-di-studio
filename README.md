@@ -6,6 +6,10 @@ Un compagno di corso **vocale** che ti ascolta mentre ripeti e ti corregge quand
 
 ## Cosa fa
 
+- **📞 Dal vivo**: conversazione vocale in tempo reale con Gemini Live, come una telefonata. Risponde in circa un secondo, ha una voce naturale e si può interrompere. Usa gli stessi appunti e strumenti del vault. L'approccio audio è ispirato a [addyosmani/jarvis](https://github.com/addyosmani/jarvis) (Apache-2.0).
+- **🗂️ Conversazioni**: il pannello a destra salva da solo ogni conversazione, raggruppata per materia. Riaprendola il compagno ricorda dove eravate arrivati. Le conversazioni restano nel browser e, con il vault collegato, anche in `.compagno/sessioni/`.
+- **Spiegami**: rispiega gli appunti sezione per sezione, senza saltare niente, con una domanda di verifica alla fine di ogni parte.
+
 - **Te lo racconto**: spieghi l'argomento a voce come lo racconteresti a un compagno. Lui ti corregge a ogni pausa, oppure alla fine con un resoconto completo e un voto. Dice sempre se la correzione viene *dagli appunti* o dalla *conoscenza generale*.
 - **Interrogami**: ti fa domande sugli appunti, una alla volta, e corregge le risposte.
 - **Chiacchiera**: discussione libera sull'argomento.

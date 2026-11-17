@@ -1,8 +1,11 @@
-import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171131';
-import { Listener, speechSupported } from './speech.js?v=202611171131';
-import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171131';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171131';
-import { buildSystem, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS } from './prompts.js?v=202611171131';
+import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171143';
+import { Listener, speechSupported } from './speech.js?v=202611171143';
+import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171143';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171143';
+import { buildSystem, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171143';
+
+import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171143';
+import { LiveSession, pickLiveModels, LIVE_VOICES } from './live.js?v=202611171143';
 
 const $ = (s) => document.querySelector(s);
 
@@ -15,6 +18,9 @@ const DEFAULTS = {
   pause: 2.5,
   voice: '',
   fallbacks: [], // modelli di riserva misurati con «Prova velocità modelli», dal più veloce
+  liveModel: '', // modello Gemini Live preferito (vuoto = scelta automatica)
+  liveVoice: 'Kore',
+  liveModels: [], // modelli Live disponibili per la chiave
   rate: 1.05,
   mute: false,
   autosend: true,
@@ -39,6 +45,19 @@ let silenceTimer = null;
 let lastSpeechEnd = 0;
 let thinkingSince = 0;
 let lastTiming = '';
+let session = newSession(); // conversazione corrente (salvata nel pannello a destra)
+let sessionsCache = [];
+let restoring = false;
+// Conversazione dal vivo (Gemini Live)
+let live = null;
+let liveQueue = [];
+let liveState = '';
+let liveSpeaking = false;
+let liveUser = '';
+let liveBot = '';
+let liveBotBubble = null;
+let liveUserStopped = false;
+let liveModelName = '';
 
 const MODE_HELP = {
   racconto: () => settings.correction === 'fine'
@@ -167,7 +186,7 @@ async function respond() {
         model: settings.model || DEFAULTS.model,
         fast: settings.fast,
         system: buildSystem({ mode, correction: settings.correction, note, vault: vaultInfo() }),
-        contents: history,
+        contents: modelHistory(),
         tools: vault.root ? VAULT_TOOLS : undefined,
         signal: ctrl.signal,
         onNotice: (msg) => { addBubble('info', `⏳ ${msg}`); $('#log').append(bubble); },
@@ -225,10 +244,13 @@ async function respond() {
       lastTiming = `Risposta iniziata dopo ${((firstAt - started) / 1000).toFixed(1)} s${modelVersion ? ` · ${modelVersion}` : ''}`;
     }
     updateStatus();
+    touchSession();
   }
 }
 
-async function runTool({ name, args = {} }) {
+async function runTool({ name, args = {} }, { live: isLive = false } = {}) {
+  // In chiamata dal vivo il prompt non si può aggiornare: gli appunti aperti vanno restituiti per intero.
+  const fullText = () => (isLive ? { testo: note.text.slice(0, 60000) } : {});
   if (!vault.root) return { errore: 'Nessun vault collegato.' };
   if (name === 'cerca_note') {
     const query = String(args.query || '');
@@ -241,7 +263,7 @@ async function runTool({ name, args = {} }) {
       const n = vault.notes.find((x) => x.path === strict[0].path);
       try {
         await openNote(n);
-        return { aperta: n.path, altri_risultati: risultati.filter((p) => p !== n.path).slice(0, 5), inizio: note.text.slice(0, 600) };
+        return { aperta: n.path, altri_risultati: risultati.filter((p) => p !== n.path).slice(0, 5), inizio: note.text.slice(0, 600), ...fullText() };
       } catch { /* se non si legge, restituiamo solo i risultati */ }
     }
     addBubble('info', `🔎 Cerco «${query}»: ${risultati.length ? `${risultati.length} risultati` : 'nessun risultato'}.`);
@@ -255,7 +277,7 @@ async function runTool({ name, args = {} }) {
     if (!found) return { errore: `Nota non trovata: ${wanted}. Usa prima cerca_note.` };
     try {
       await openNote(found);
-      return { aperta: found.path, caratteri: note.text.length, inizio: note.text.slice(0, 800) };
+      return { aperta: found.path, caratteri: note.text.length, inizio: note.text.slice(0, 800), ...fullText() };
     } catch (err) {
       return { errore: `Impossibile leggere la nota: ${err.message}` };
     }
@@ -263,27 +285,333 @@ async function runTool({ name, args = {} }) {
   return { errore: `Strumento sconosciuto: ${name}` };
 }
 
-function startQuizIfNeeded() {
-  if (history.length || controller) return false;
-  if (mode === 'interrogami') {
-    sendUser(START_QUIZ, '', { hidden: true });
-    return true;
-  }
-  if (mode === 'spiegami' && note) {
-    sendUser(START_EXPLAIN, '', { hidden: true });
-    return true;
-  }
-  return false;
+/** Testo con cui il compagno inizia da solo (Interrogami / Spiegami), una volta per modalità e conversazione. */
+function kickoffText() {
+  if (session.kickedOff === mode) return '';
+  if (mode === 'interrogami') return START_QUIZ;
+  if (mode === 'spiegami' && note) return START_EXPLAIN;
+  return '';
 }
 
-function resetSession(message = 'Nuova sessione.') {
+function startQuizIfNeeded() {
+  if (controller) return false;
+  const k = kickoffText();
+  if (!k) return false;
+  session.kickedOff = mode;
+  sendUser(k, '', { hidden: true });
+  return true;
+}
+
+/** Cronologia da mandare al modello: le ultime N voci, iniziando sempre da un messaggio dell'utente. */
+function modelHistory(max = 40) {
+  let h = history.slice(-max);
+  while (h.length && !(h[0].role === 'user' && h[0].parts.some((p) => p.text))) h = h.slice(1);
+  return h;
+}
+
+async function startNewSession() {
+  if (live) stopLive();
   if (controller) controller.abort();
   speaker.cancel();
+  await flushSave();
+  session = newSession();
+  session.mode = mode;
   history = [];
   buffer = '';
   showLive('');
   $('#log').replaceChildren();
-  addBubble('info', message);
+  addBubble('info', note ? `Nuova conversazione su «${note.title}».` : 'Nuova conversazione.', { transient: true });
+  renderSessions();
+}
+
+// ---------- Conversazione dal vivo (Gemini Live) ----------
+function commitLiveUser() {
+  const t = liveUser.trim();
+  liveUser = '';
+  showLive('');
+  if (!t) return;
+  addBubble('user', t);
+  addUserTurn(t);
+}
+function commitLiveBot(suffix = '') {
+  const t = liveBot.trim();
+  if (t) {
+    history.push({ role: 'model', parts: [{ text: t }] });
+    if (suffix && liveBotBubble) renderInto(liveBotBubble, t + suffix);
+  }
+  liveBot = '';
+  liveBotBubble = null;
+}
+/** Turni precedenti solo testuali, per dare a Gemini Live il contesto della conversazione. */
+function liveSeed() {
+  const out = [];
+  for (const h of modelHistory(30)) {
+    const parts = h.parts.filter((p) => p.text).map((p) => ({ text: p.text }));
+    if (!parts.length) continue;
+    const last = out[out.length - 1];
+    if (last?.role === h.role) last.parts.push(...parts);
+    else out.push({ role: h.role, parts });
+  }
+  return out;
+}
+function updateLiveUi() {
+  const b = $('#btn-live');
+  b.textContent = live ? '📴 Chiudi chiamata' : '📞 Dal vivo';
+  b.setAttribute('aria-pressed', String(Boolean(live)));
+  $('#btn-mic').disabled = Boolean(live);
+  $('#btn-done').disabled = Boolean(live);
+  updateStatus();
+}
+
+async function startLive() {
+  if (!settings.key) { openSettings(); return; }
+  if (controller) controller.abort();
+  speaker.cancel();
+  if (listener.active) listener.stop();
+  buffer = '';
+  showLive('');
+  let available = settings.liveModels;
+  if (!available?.length) {
+    try {
+      available = liveCandidates(await listAllModels(settings.key));
+      settings.liveModels = available;
+      saveSettings();
+    } catch (err) {
+      addBubble('error', err.message || String(err));
+      return;
+    }
+  }
+  liveQueue = pickLiveModels(available, settings.liveModel);
+  if (!liveQueue.length) {
+    addBubble('error', 'La tua chiave non ha modelli Gemini Live disponibili.');
+    return;
+  }
+  connectLive(0);
+}
+
+async function connectLive(i) {
+  const model = liveQueue[i];
+  liveModelName = model;
+  const kickoff = kickoffText();
+  if (kickoff) session.kickedOff = mode;
+  let announced = false;
+  liveUserStopped = false;
+  const s = new LiveSession({
+    key: settings.key,
+    model,
+    voice: settings.liveVoice,
+    system: buildSystem({ mode, correction: settings.correction, note, vault: vaultInfo() }) + LIVE_EXTRA,
+    tools: vault.root ? VAULT_TOOLS : undefined,
+    seed: liveSeed(),
+    kickoff,
+    onState: (st) => {
+      liveState = st;
+      if (st === 'connected' && !announced) {
+        announced = true;
+        addBubble('info', `📞 In chiamata (${model}). Parla pure: puoi interromperlo quando vuoi. Con le cuffie funziona meglio.`, { transient: true });
+      }
+      updateStatus();
+    },
+    onUserText: (t) => { liveUser += t; showLive(liveUser); },
+    onModelText: (t) => {
+      commitLiveUser();
+      if (!liveBotBubble) liveBotBubble = addBubble('bot', '');
+      liveBot += t;
+      renderInto(liveBotBubble, liveBot);
+      scrollLog();
+    },
+    onTurnComplete: () => { commitLiveUser(); commitLiveBot(); touchSession(); },
+    onInterrupted: () => commitLiveBot(' …'),
+    onSpeaking: (b) => { liveSpeaking = b; updateStatus(); },
+    onToolCall: (fc) => { commitLiveUser(); return runTool(fc, { live: true }); },
+    onClosed: ({ code, reason, everConnected }) => {
+      if (live === s) live = null;
+      updateLiveUi();
+      if (liveUserStopped) return;
+      commitLiveUser();
+      commitLiveBot();
+      if (!everConnected && i + 1 < liveQueue.length) {
+        addBubble('info', `⏳ ${model} non disponibile${reason ? ` (${reason})` : ''}: provo con ${liveQueue[i + 1]}.`, { transient: true });
+        connectLive(i + 1);
+      } else {
+        addBubble('error', `La chiamata si è chiusa${reason ? `: ${reason}` : ''} (codice ${code}).${everConnected ? '' : ' Nessun modello Live ha accettato la connessione.'}`);
+        touchSession();
+      }
+    },
+  });
+  live = s;
+  updateLiveUi();
+  try {
+    await s.start();
+  } catch (err) {
+    if (live === s) live = null;
+    s.stop();
+    updateLiveUi();
+    addBubble('error', err.name === 'NotAllowedError' ? 'Permesso del microfono negato: consentilo dalla barra degli indirizzi di Chrome.' : `Impossibile avviare la chiamata: ${err.message}`);
+  }
+}
+
+function stopLive() {
+  liveUserStopped = true;
+  const s = live;
+  live = null;
+  s?.stop();
+  commitLiveUser();
+  commitLiveBot();
+  liveSpeaking = false;
+  updateLiveUi();
+  touchSession();
+}
+
+// ---------- Conversazioni salvate (pannello a destra) ----------
+let saveTimer = null;
+function touchSession() {
+  if (restoring) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(persistSession, 400);
+}
+async function flushSave() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    await persistSession();
+  }
+}
+function firstUserText() {
+  for (const h of history) {
+    if (h.role !== 'user') continue;
+    const t = h.parts.find((p) => p.text && !p.text.startsWith('['))?.text;
+    if (t) return t.length > 50 ? `${t.slice(0, 50)}…` : t;
+  }
+  return '';
+}
+async function persistSession() {
+  saveTimer = null;
+  if (!history.length) return;
+  session.history = history;
+  session.mode = mode;
+  session.notePath = note?.path || '';
+  session.noteTitle = note?.title || '';
+  session.noteText = note && !note.path ? note.text.slice(0, 200000) : '';
+  session.subject = subjectOf(session.notePath) || (note && !note.path ? 'Appunti caricati' : 'Senza appunti');
+  session.title = session.noteTitle || firstUserText() || 'Conversazione';
+  session.log = [...$('#log').querySelectorAll('.bubble')]
+    .filter((el) => el.dataset.kind && !el.classList.contains('transient') && el.dataset.kind !== 'error' && el.dataset.raw && el.dataset.raw !== '…')
+    .map((el) => ({ kind: el.dataset.kind, text: el.dataset.raw }));
+  session.updatedAt = Date.now();
+  try {
+    await saveSession(session, vault.root);
+  } catch (err) {
+    addBubble('error', `Non riesco a salvare la conversazione: ${err.message}`);
+  }
+  renderSessions();
+}
+
+const MODE_NAMES = { spiegami: 'Spiegami', racconto: 'Te lo racconto', interrogami: 'Interrogami', libera: 'Chiacchiera' };
+function when(ts) {
+  const d = new Date(ts);
+  const today = new Date();
+  const y = new Date(); y.setDate(today.getDate() - 1);
+  const hm = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === today.toDateString()) return `oggi ${hm}`;
+  if (d.toDateString() === y.toDateString()) return `ieri ${hm}`;
+  return d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
+}
+
+async function renderSessions() {
+  sessionsCache = await listSessions();
+  const box = $('#session-list');
+  if (!box) return;
+  if (!sessionsCache.length) {
+    box.innerHTML = '<p class="hint">Qui compariranno le tue conversazioni, raggruppate per materia. Si salvano da sole.</p>';
+    return;
+  }
+  const groups = new Map();
+  for (const s of sessionsCache) {
+    const g = s.subject || 'Senza appunti';
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(s);
+  }
+  box.replaceChildren(...[...groups].map(([subject, items]) => {
+    const sec = document.createElement('section');
+    sec.className = 'session-group';
+    sec.innerHTML = `<h3>${escapeHtml(subject)}</h3>`;
+    for (const s of items) {
+      const row = document.createElement('div');
+      row.className = 'session-row';
+      const b = document.createElement('button');
+      b.className = 'session-item';
+      b.setAttribute('aria-current', String(s.id === session.id));
+      const last = [...(s.log || [])].reverse().find((e) => e.kind === 'user' || e.kind === 'bot');
+      b.innerHTML = `<span class="s-title">${escapeHtml(s.title || 'Conversazione')}</span>`
+        + `<span class="s-meta">${escapeHtml(MODE_NAMES[s.mode] || '')} · ${escapeHtml(when(s.updatedAt))}</span>`
+        + (last ? `<span class="s-last">${escapeHtml(last.text.slice(0, 80))}</span>` : '');
+      b.onclick = () => loadSession(s.id);
+      const del = document.createElement('button');
+      del.className = 'ghost small s-del';
+      del.title = 'Elimina conversazione';
+      del.textContent = '✕';
+      del.onclick = async () => {
+        if (!confirm(`Eliminare la conversazione «${s.title}»?`)) return;
+        await deleteSession(s.id, vault.root);
+        if (s.id === session.id) { session = newSession(); session.mode = mode; history = []; $('#log').replaceChildren(); }
+        renderSessions();
+      };
+      row.append(b, del);
+      sec.append(row);
+    }
+    return sec;
+  }));
+}
+
+async function loadSession(id) {
+  if (id === session.id) return;
+  const s = sessionsCache.find((x) => x.id === id);
+  if (!s) return;
+  if (live) stopLive();
+  if (controller) controller.abort();
+  speaker.cancel();
+  if (listener.active) listener.stop();
+  await flushSave();
+  restoring = true;
+  try {
+    session = s;
+    history = Array.isArray(s.history) ? s.history : [];
+    setMode(s.mode || 'racconto', { silent: true });
+    $('#log').replaceChildren();
+    for (const e of s.log || []) addBubble(e.kind, e.text);
+    if (s.notePath && vault.root) {
+      const n = vault.notes.find((x) => x.path === s.notePath);
+      if (n) await openNote(n, { announce: false });
+      else addBubble('info', `La nota «${s.notePath}» non è più nel vault.`, { transient: true });
+    } else if (s.noteText) {
+      setNote({ title: s.noteTitle || 'Appunti', text: s.noteText }, { announce: false });
+    } else if (s.notePath) {
+      addBubble('info', 'Collega il vault per riaprire gli appunti di questa conversazione.', { transient: true });
+    } else {
+      setNote(null, { announce: false });
+    }
+  } finally {
+    restoring = false;
+  }
+  addBubble('info', `↩️ Ripresa «${s.title}» (${when(s.updatedAt)}): il compagno ricorda dove eravate arrivati. Continua pure a parlare.`, { transient: true });
+  renderSessions();
+}
+
+function setMode(m, { silent = false } = {}) {
+  if (!MODE_NAMES[m]) m = 'racconto';
+  const changed = m !== mode;
+  mode = m;
+  document.querySelectorAll('.modes button').forEach((x) => x.setAttribute('aria-selected', String(x.dataset.mode === m)));
+  updateModeHelp();
+  updateStatus();
+  if (silent || !changed) return;
+  if (live) {
+    stopLive();
+    addBubble('info', 'Ho chiuso la chiamata per cambiare modalità: premi di nuovo «📞 Dal vivo» per continuare.', { transient: true });
+  }
+  if (history.length) addBubble('info', `Modalità: ${MODE_NAMES[m]}. Continuiamo la stessa conversazione.`);
+  touchSession();
 }
 
 // ---------- Interfaccia: chat ----------
@@ -291,6 +619,7 @@ function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 function renderInto(el, text) {
+  el.dataset.raw = text;
   const html = escapeHtml(text)
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .split(/\n{2,}/)
@@ -298,9 +627,10 @@ function renderInto(el, text) {
     .join('');
   el.innerHTML = html;
 }
-function addBubble(kind, text) {
+function addBubble(kind, text, { transient = false } = {}) {
   const li = document.createElement('li');
-  li.className = `bubble ${kind}`;
+  li.className = `bubble ${kind}${transient ? ' transient' : ''}`;
+  li.dataset.kind = kind;
   renderInto(li, text);
   $('#log').append(li);
   scrollLog();
@@ -321,6 +651,16 @@ function updateStatus() {
   const el = $('#status');
   let text = 'Pronto.';
   let cls = '';
+  if (live) {
+    cls = liveSpeaking ? 'speaking' : 'listening';
+    text = {
+      connecting: 'Mi collego a Gemini Live…',
+      reconnecting: 'Riconnessione alla chiamata…',
+    }[liveState] || (liveSpeaking ? `Il compagno sta parlando… (interrompilo quando vuoi) · ${liveModelName}` : `📞 In chiamata: parla pure. · ${liveModelName}`);
+    el.textContent = text;
+    el.className = `status ${cls}`;
+    return;
+  }
   if (controller) {
     const secs = Math.floor((Date.now() - thinkingSince) / 1000);
     text = `Il compagno sta pensando…${secs >= 2 ? ` ${secs} s` : ''}`;
@@ -357,6 +697,7 @@ function setNote(n, { announce = true } = {}) {
   }
   highlightCurrent();
   if (announce) addBubble('info', n ? `📂 Appunti: «${n.path || n.title}».` : 'Appunti rimossi.');
+  if (history.length) touchSession();
 }
 
 // ---------- Esploratore delle note (come in Obsidian) ----------
@@ -501,10 +842,11 @@ async function openVault(handle, { quiet = false } = {}) {
     status.hidden = false;
     status.textContent = `✅ Collegato a «${handle.name}» · ${vault.notes.length} note`;
     renderNoteList();
+    importFromVault(handle).then((n) => { if (n) renderSessions(); });
     if (!vault.notes.length) {
       addBubble('error', `Nella cartella «${handle.name}» non ho trovato note .md. Devi scegliere la cartella principale del vault (quella che contiene la cartella .obsidian), non una sottocartella di allegati.`);
     } else if (!quiet) {
-      addBubble('info', `Vault «${handle.name}» collegato: ${vault.notes.length} note. Ora puoi dire, per esempio, «apri Fluidodinamica 1, lezione 3».`);
+      addBubble('info', `Vault «${handle.name}» collegato: ${vault.notes.length} note. Ora puoi dire, per esempio, «apri Fluidodinamica 1, lezione 3».`, { transient: true });
     }
     // Riapre l'ultima nota usata.
     let last = null;
@@ -545,7 +887,18 @@ function fillVoices() {
   if (chosen) sel.value = chosen.name;
 }
 
+function fillLiveModels() {
+  const sel = $('#set-live-model');
+  if (!sel) return;
+  const models = pickLiveModels(settings.liveModels || [], '');
+  sel.replaceChildren(new Option('Automatico (il migliore disponibile)', ''), ...models.map((m) => new Option(m, m)));
+  sel.value = models.includes(settings.liveModel) ? settings.liveModel : '';
+}
+
 function openSettings() {
+  fillLiveModels();
+  $('#set-live-voice').replaceChildren(...LIVE_VOICES.map((v) => new Option(v, v)));
+  $('#set-live-voice').value = settings.liveVoice || 'Kore';
   $('#set-key').value = settings.key;
   $('#set-model').value = settings.model;
   $('#set-fast').checked = settings.fast;
@@ -570,6 +923,8 @@ function readSettingsForm() {
   settings.rate = Number($('#set-rate').value);
   settings.mute = $('#set-mute').checked;
   settings.autosend = $('#set-autosend').checked;
+  settings.liveModel = $('#set-live-model').value;
+  settings.liveVoice = $('#set-live-voice').value || 'Kore';
   saveSettings();
   applyVoiceSettings();
   updateModeHelp();
@@ -587,17 +942,12 @@ function init() {
 
   // Modalità
   document.querySelectorAll('.modes button').forEach((b) => {
-    b.onclick = () => {
-      if (b.dataset.mode === mode) return;
-      mode = b.dataset.mode;
-      document.querySelectorAll('.modes button').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
-      updateModeHelp();
-      resetSession(`Modalità: ${b.textContent}.`);
-    };
+    b.onclick = () => setMode(b.dataset.mode);
   });
 
   // Microfono
   $('#btn-mic').onclick = async () => {
+    if (live) return;
     if (listener.active) {
       listener.stop();
       flush();
@@ -611,8 +961,23 @@ function init() {
     if (savedVault && !vault.root) await openVault(savedVault, { quiet: true });
     if (!flush({ finished: true })) startQuizIfNeeded();
   };
-  $('#btn-stop-voice').onclick = () => speaker.cancel();
-  $('#btn-reset').onclick = () => resetSession();
+  $('#btn-stop-voice').onclick = () => { speaker.cancel(); live?.silence(); };
+  $('#btn-reset').onclick = () => startNewSession();
+  $('#btn-new-session').onclick = () => startNewSession();
+  $('#btn-live').onclick = async () => {
+    if (live) { stopLive(); return; }
+    if (savedVault && !vault.root) await openVault(savedVault, { quiet: true });
+    startLive();
+  };
+  $('#btn-toggle-sessions').onclick = () => {
+    const hidden = document.body.classList.toggle('no-sessions');
+    try { localStorage.setItem('compagno.sessionsHidden', hidden ? '1' : '0'); } catch { /* ignora */ }
+  };
+  let sessionsHidden = window.innerWidth < 1100;
+  try { const v = localStorage.getItem('compagno.sessionsHidden'); if (v !== null && window.innerWidth >= 1100) sessionsHidden = v === '1'; } catch { /* ignora */ }
+  document.body.classList.toggle('no-sessions', sessionsHidden);
+  renderSessions();
+  window.addEventListener('beforeunload', () => { if (saveTimer) persistSession(); });
 
   // Testo / Wispr Flow
   const input = $('#text-input');
@@ -623,6 +988,13 @@ function init() {
     const t = input.value.trim();
     if (!t) return;
     input.value = '';
+    if (live) {
+      commitLiveUser();
+      addBubble('user', t);
+      addUserTurn(t);
+      live.sendText(t);
+      return;
+    }
     const prefix = mode === 'racconto' && settings.correction === 'fine' ? FINISHED_PREFIX : '';
     sendUser(t, prefix);
   };
@@ -716,6 +1088,9 @@ function init() {
       li.querySelector('button').onclick = () => { $('#set-model').value = r.model; };
       out.append(li);
     });
+    settings.liveModels = live;
+    if (!settings.liveModel || !live.includes(settings.liveModel)) settings.liveModel = pickLiveModels(live, '')[0] || '';
+    fillLiveModels();
     const liveLi = document.createElement('li');
     liveLi.className = 'hint';
     liveLi.textContent = live.length ? `Modelli Gemini Live (voce in tempo reale) disponibili: ${live.join(', ')}` : 'Nessun modello Gemini Live disponibile per questa chiave.';
@@ -767,7 +1142,7 @@ function init() {
   $('#btn-save-summary').onclick = saveSummary;
 
   if (!settings.key) {
-    addBubble('info', 'Benvenuto! Per iniziare incolla la tua chiave gratuita di Gemini nelle impostazioni.');
+    addBubble('info', 'Benvenuto! Per iniziare incolla la tua chiave gratuita di Gemini nelle impostazioni.', { transient: true });
     openSettings();
   }
 }
@@ -791,7 +1166,7 @@ async function makeSummary() {
       fast: false,
       timeoutMs: 40000,
       system: buildSystem({ mode, correction: settings.correction, note }),
-      contents: [...history, { role: 'user', parts: [{ text: summaryRequest(date) }] }],
+      contents: [...modelHistory(60), { role: 'user', parts: [{ text: summaryRequest(date) }] }],
     });
     $('#summary-text').value = text.trim();
     $('#btn-copy-summary').textContent = '📋 Copia';
@@ -821,6 +1196,7 @@ async function saveSummary() {
     btn.textContent = 'Salvato ✓';
     btn.disabled = true;
     addBubble('info', `Resoconto aggiunto a «${note.path}». Copia di sicurezza: ${backup}`);
+    touchSession();
   } catch (err) {
     addBubble('error', `Salvataggio non riuscito: ${err.message}`);
   }
