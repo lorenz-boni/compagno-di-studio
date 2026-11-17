@@ -115,10 +115,9 @@ async function openStream(model, key, body, fast, signal) {
     if (cfg) body.generationConfig.thinkingConfig = cfg;
     else delete body.generationConfig.thinkingConfig;
     const res = await post(model, key, body, signal);
-    if (res.status === 400 && cfg) {
-      const detail = await res.clone().text();
-      if (/thinking/i.test(detail)) { i++; continue; }
-    }
+    // Un 400 con un'impostazione di "ragionamento" attiva quasi sempre significa che il modello non la
+    // accetta (a volte con un messaggio generico «invalid argument»): proviamo la successiva.
+    if (res.status === 400 && cfg) { i++; continue; }
     if (res.ok && fast) thinkingChoice.set(model, i);
     return res;
   }
@@ -253,19 +252,44 @@ export async function complete(opts) {
  * Diagnostica: per ogni modello misura quanto ci mette a iniziare a rispondere a una domanda breve.
  * Restituisce [{ model, ms, status, text }].
  */
-export async function benchmark(key, models, onResult) {
+/** Controllo di riserva: richiesta normale (senza streaming e senza impostazioni sul ragionamento). */
+async function plainCheck(model, key, timeoutMs = 20000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`${BASE}/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Ciao, come va? Rispondi con una frase.' }] }] }),
+      signal: ctrl.signal,
+    });
+    const ms = Math.round(performance.now() - t0);
+    if (res.ok) return `richiesta semplice: risponde in ${(ms / 1000).toFixed(1)} s`;
+    let d = '';
+    try { d = (await res.json())?.error?.message || ''; } catch { /* ignora */ }
+    return `richiesta semplice: errore ${res.status} ${d.slice(0, 100)}`;
+  } catch {
+    return `richiesta semplice: nessuna risposta entro ${timeoutMs / 1000} s`;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function benchmark(key, models, onResult, { timeoutMs = 15000 } = {}) {
   const out = [];
+  let plainChecks = 0;
   for (const model of models) {
     const t0 = performance.now();
     let row;
     try {
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 30000);
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
       const r = await startModel(model, key, {
         systemInstruction: { parts: [{ text: 'Rispondi in italiano con una sola frase breve.' }] },
         contents: [{ role: 'user', parts: [{ text: 'Ciao, come va?' }] }],
         generationConfig: { temperature: 0.5 },
-      }, true, ctrl.signal, 30000);
+      }, true, ctrl.signal, timeoutMs);
       clearTimeout(timer);
       const ms = Math.round(performance.now() - t0);
       if (r.status === 200) {
@@ -273,14 +297,20 @@ export async function benchmark(key, models, onResult) {
         row = { model, ms, status: 'ok', text: c?.text || '' };
         for await (const _ of r.events) { /* svuota */ }
       } else if (r.status === 'timeout') {
-        row = { model, ms, status: 'oltre 30 s' };
+        row = { model, ms, status: `oltre ${timeoutMs / 1000} s` };
       } else {
         let detail = '';
         try { detail = (await r.res.json())?.error?.message || ''; } catch { /* corpo non JSON */ }
         row = { model, ms, status: `errore ${r.status}`, detail: detail.slice(0, 160) };
       }
     } catch (err) {
-      row = { model, ms: Math.round(performance.now() - t0), status: err.name === 'AbortError' ? 'oltre 30 s' : err.message };
+      row = { model, ms: Math.round(performance.now() - t0), status: err.name === 'AbortError' ? `oltre ${timeoutMs / 1000} s` : err.message };
+    }
+    // Per capire se il blocco dipende dal modo di chiamare il modello, sui primi modelli lenti o rifiutati
+    // (non per quota finita) proviamo anche una richiesta semplice.
+    if (row.status !== 'ok' && !String(row.status).includes('429') && plainChecks < 3) {
+      plainChecks++;
+      row.detail = [row.detail, await plainCheck(model, key)].filter(Boolean).join(' · ');
     }
     out.push(row);
     onResult?.(row);

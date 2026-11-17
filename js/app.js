@@ -1,8 +1,8 @@
-import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171119';
-import { Listener, speechSupported } from './speech.js?v=202611171119';
-import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171119';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171119';
-import { buildSystem, FINISHED_PREFIX, START_QUIZ, summaryRequest, VAULT_TOOLS } from './prompts.js?v=202611171119';
+import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171124';
+import { Listener, speechSupported } from './speech.js?v=202611171124';
+import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171124';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171124';
+import { buildSystem, FINISHED_PREFIX, START_QUIZ, summaryRequest, VAULT_TOOLS } from './prompts.js?v=202611171124';
 
 const $ = (s) => document.querySelector(s);
 
