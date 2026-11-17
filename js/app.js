@@ -1,17 +1,18 @@
-import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171555';
-import { Listener, speechSupported } from './speech.js?v=202611171555';
-import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171555';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, readNoteFull, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171555';
-import { buildSystem, TONES, rateLabel, speedInstruction, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171555';
+import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171614';
+import { Listener, speechSupported } from './speech.js?v=202611171614';
+import { Speaker, cleanForSpeech, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171614';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, readNoteFull, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171614';
+import { buildSystem, TONES, rateLabel, speedInstruction, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171614';
 
-import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171555';
-import { LiveSession, pickLiveModels, LIVE_VOICES, previewVoice, playChunks, DEFAULT_LIVE_VOICE, SAFE_LIVE_VOICE, CLASSIC_VOICES } from './live.js?v=202611171555';
-import { mountVoicePicker } from './voicepicker.js?v=202611171555';
-import { createOnboarding } from './onboarding.js?v=202611171555';
-import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611171555';
-import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611171555';
-import { stripExt, isMarkdown, kindOf, extractText, fileToBase64, OCR_PROMPT, ACCEPT } from './docs.js?v=202611171555';
-import { dbGet, dbPut } from './db.js?v=202611171555';
+import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171614';
+import { LiveSession, NaturalReader, pickLiveModels, LIVE_VOICES, previewVoice, playChunks, DEFAULT_LIVE_VOICE, SAFE_LIVE_VOICE, CLASSIC_VOICES } from './live.js?v=202611171614';
+import { createWidget } from './widget.js?v=202611171614';
+import { mountVoicePicker } from './voicepicker.js?v=202611171614';
+import { createOnboarding } from './onboarding.js?v=202611171614';
+import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611171614';
+import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611171614';
+import { stripExt, isMarkdown, kindOf, extractText, fileToBase64, OCR_PROMPT, ACCEPT } from './docs.js?v=202611171614';
+import { dbGet, dbPut } from './db.js?v=202611171614';
 
 const $ = (s) => document.querySelector(s);
 
@@ -29,6 +30,7 @@ const DEFAULTS = {
   tone: 'confidenziale', // confidenziale | equilibrato | professionale
   onboarded: false, // presentazione iniziale completata
   voiceSupport: {}, // per ogni voce: con quale modello Live funziona (ok) e con quali no (ko)
+  voiceEngine: 'naturale', // risposte lette con la voce naturale di Gemini ('naturale') o con quella di Chrome ('chrome')
   liveModels: [], // modelli Live disponibili per la chiave
   annotate: true, // registra argomento, concetti ed errori dopo ogni risposta
   profile: { name: '', university: '', degree: '', year: '', notes: '' }, // percorso di studi, per dare contesto a JARVIS
@@ -70,6 +72,7 @@ let liveBotBubble = null;
 let liveUserStopped = false;
 let liveModelName = '';
 let lastErrorAt = 0;
+let widget = null; // mini barra sempre in primo piano (creata più sotto)
 let paused = false; // pausa: JARVIS non parla e non ascolta finché non riprendi
 let pausedListening = false; // il microfono classico era acceso quando hai messo in pausa
 let activityStart = 0; // inizio della sessione di studio corrente (per la durata nel pannello)
@@ -91,10 +94,46 @@ const MODE_HELP = {
 };
 
 // ---------- Voce ----------
-const speaker = new Speaker({
+// Voce delle risposte: naturale (una voce di Gemini Live legge il testo) con la voce di Chrome come riserva.
+const chromeSpeaker = new Speaker({
   onStart: updateStatus,
   onEnd: () => { lastSpeechEnd = Date.now(); updateStatus(); },
 });
+let naturalFailedAt = 0;
+function naturalModel() {
+  const models = settings.liveModels || [];
+  return models.length ? orderModelsForVoice(pickLiveModels(models, settings.liveModel), settings.liveVoice)[0] : '';
+}
+function useNatural() {
+  return settings.voiceEngine !== 'chrome' && Boolean(settings.key) && Boolean(naturalModel())
+    && Date.now() - naturalFailedAt > 5 * 60 * 1000;
+}
+const reader = new NaturalReader({
+  getConfig: () => ({ key: settings.key, model: naturalModel(), voice: settings.liveVoice || DEFAULT_LIVE_VOICE, speed: speedInstruction(settings.rate) }),
+  onStart: updateStatus,
+  onEnd: () => { lastSpeechEnd = Date.now(); updateStatus(); },
+  onFail: (err, left) => {
+    naturalFailedAt = Date.now();
+    addBubble('info', `🔈 Voce naturale non disponibile in questo momento (${err.message}): per qualche minuto uso la voce di Chrome.`, { transient: true });
+    left.forEach((t) => chromeSpeaker.say(t));
+  },
+});
+const speaker = {
+  get speaking() { return chromeSpeaker.speaking || reader.speaking; },
+  get spoken() { return reader.speaking ? reader.spoken : chromeSpeaker.spoken; },
+  set voiceName(v) { chromeSpeaker.voiceName = v; },
+  set rate(r) { chromeSpeaker.rate = r; },
+  set muted(m) { chromeSpeaker.muted = m; },
+  say(text) {
+    if (settings.mute) return;
+    if (useNatural()) reader.say(cleanForSpeech(text));
+    else chromeSpeaker.say(text);
+  },
+  pause() { chromeSpeaker.pause(); reader.pause(); },
+  resume() { chromeSpeaker.resume(); reader.resume(); },
+  cancel() { chromeSpeaker.cancel(); reader.cancel(); },
+  level() { return reader.speaking ? reader.level() : null; },
+};
 function applyVoiceSettings() {
   speaker.voiceName = settings.voice;
   speaker.rate = Number(settings.rate);
@@ -444,6 +483,7 @@ function updateLiveUi() {
 async function startLive() {
   if (!settings.key) { openSettings(); return; }
   clearPause();
+  reader.close(); // una sola sessione vocale alla volta
   if (controller) controller.abort();
   speaker.cancel();
   if (listener.active) listener.stop();
@@ -824,7 +864,7 @@ function contextData() {
     mode: MODE_NAMES[mode],
     duration: mins === null ? '—' : `${mins} min`,
     turns: userTurns(),
-    voice: live ? `Dal vivo · ${liveModelName}` : (settings.mute ? 'Solo testo' : 'Voce di Chrome'),
+    voice: live ? `Dal vivo · ${liveModelName}` : (settings.mute ? 'Solo testo' : useNatural() ? `Naturale · ${LIVE_VOICES.find((v) => v.name === settings.liveVoice)?.label || settings.liveVoice}` : 'Voce di Chrome'),
     mic: live ? 'In chiamata' : (listener.active ? 'Attivo (Chrome)' : 'Spento'),
     latency: lastTiming ? lastTiming.replace('Risposta iniziata dopo ', '') : '—',
   };
@@ -843,6 +883,7 @@ function refreshChrome() {
   else setConnection('idle', 'Pronto');
   renderContext(contextData());
   refreshStudy();
+  widget?.update();
 }
 
 function updateStatus() {
@@ -1147,6 +1188,7 @@ function fillLiveModels() {
 }
 
 function openSettings() {
+  $('#set-voice-engine').value = settings.voiceEngine === 'chrome' ? 'chrome' : 'naturale';
   $('#set-annotate').checked = settings.annotate !== false;
   const pr = settings.profile || {};
   $('#set-name').value = pr.name || '';
@@ -1188,6 +1230,8 @@ function readSettingsForm() {
   settings.autosend = $('#set-autosend').checked;
   settings.liveModel = $('#set-live-model').value;
   settings.annotate = $('#set-annotate').checked;
+  settings.voiceEngine = $('#set-voice-engine').value;
+  if (settings.voiceEngine === 'naturale') naturalFailedAt = 0;
   settings.profile = {
     name: $('#set-name').value.trim(),
     university: $('#set-university').value.trim(),
@@ -1203,6 +1247,24 @@ function readSettingsForm() {
   updateModeHelp();
   updateStatus();
 }
+
+// ---------- Widget (mini barra sempre in primo piano) ----------
+widget = createWidget({
+  actions: {
+    call: () => $('#btn-live').click(),
+    mic: () => $('#btn-mic').click(),
+    pause: () => setPaused(!paused),
+    stop: () => $('#btn-stop-voice').click(),
+    done: () => $('#btn-done').click(),
+  },
+  getState: () => ({ core: coreStateNow(), live: Boolean(live), paused, mic: listener.active }),
+  level: () => {
+    if (live) { const l = live.levels?.(); return l ? (liveSpeaking ? l.output : l.input) : null; }
+    if (speaker.speaking) return speaker.level();
+    return listener.active ? micMeter.level() : null;
+  },
+  onClose: () => $('#btn-widget')?.setAttribute('aria-pressed', 'false'),
+});
 
 // ---------- Presentazione iniziale e voci ----------
 async function verifyKey(key) {
@@ -1348,6 +1410,7 @@ function init() {
       const l = live.levels?.();
       return l ? (liveSpeaking ? l.output : l.input) : null;
     }
+    if (speaker.speaking) return speaker.level();
     return listener.active ? micMeter.level() : null;
   });
   setInterval(() => renderContext(contextData()), 15000);
@@ -1382,6 +1445,12 @@ function init() {
   };
   $('#btn-stop-voice').onclick = () => { speaker.cancel(); live?.silence(); clearPause(); };
   $('#btn-pause').onclick = () => setPaused(!paused);
+  $('#btn-widget').onclick = async () => {
+    if (widget.isOpen) { widget.close(); return; }
+    const mode = await widget.open();
+    $('#btn-widget').setAttribute('aria-pressed', 'true');
+    if (mode === 'inline') addBubble('info', 'Il widget è dentro la pagina: trascinalo dal cerchio. (Per tenerlo sopra le altre app serve Chrome aggiornato.)', { transient: true });
+  };
   $('#btn-reset').onclick = () => startNewSession();
   $('#btn-new-session').onclick = () => startNewSession();
   $('#btn-live').onclick = async () => {

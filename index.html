@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=202611171555">
+  <link rel="stylesheet" href="styles.css?v=202611171614">
 </head>
 <body data-core="idle">
   <!-- Icone (stile lineare, disegnate qui: nessuna libreria esterna) -->
@@ -48,6 +48,7 @@
       <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
       <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
       <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></symbol>
+      <symbol id="i-widget" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="11" y="11" width="8" height="6" rx="1.5"/></symbol>
       <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></symbol>
       <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
@@ -65,7 +66,7 @@
       </svg>
       <div class="brand-text">
         <span class="brand-name">JARVIS</span>
-        <span class="brand-sub">Compagno di studio <small id="app-version" class="version">v202611171555</small></span>
+        <span class="brand-sub">Compagno di studio <small id="app-version" class="version">v202611171614</small></span>
       </div>
     </div>
 
@@ -83,6 +84,7 @@
     </nav>
 
     <div class="top-actions">
+      <button id="btn-widget" class="icon-btn" title="Widget: mini barra di JARVIS sempre in primo piano, da tenere accanto agli appunti" aria-label="Widget" aria-pressed="false"><svg class="ic"><use href="#i-widget"/></svg></button>
       <button id="btn-toggle-library" class="icon-btn" title="Mostra o nascondi la libreria" aria-label="Libreria" aria-pressed="true"><svg class="ic"><use href="#i-panel-left"/></svg></button>
       <button id="btn-toggle-sessions" class="icon-btn" title="Mostra o nascondi contesto e cronologia" aria-label="Contesto di studio" aria-pressed="true"><svg class="ic"><use href="#i-panel-right"/></svg></button>
       <button id="btn-focus" class="icon-btn" title="Full immersion: nasconde i pannelli laterali" aria-label="Full immersion" aria-pressed="false"><svg class="ic"><use href="#i-focus"/></svg></button>
@@ -289,7 +291,7 @@
         <div class="field-label">Voce di JARVIS <span class="hint">— tocca ▶ per ascoltarla, poi scegli la scheda che ti piace</span></div>
         <select id="wz-voice" hidden aria-hidden="true"></select>
         <div id="wz-voice-picker" class="voice-picker"></div>
-        <span class="hint" id="wz-voice-status">Sono le voci di «Parla con JARVIS». Il microfono classico usa la voce di Chrome, più meccanica.</span>
+        <span class="hint" id="wz-voice-status">La voce scelta parla sia in «Parla con JARVIS» sia quando leggi le risposte con il microfono classico.</span>
       </section>
 
       <section class="wiz-pane" data-step="4" hidden>
@@ -349,7 +351,13 @@
         <input id="set-pause" type="range" min="1" max="6" step="0.5">
       </label>
 
-      <label>Voce (microfono classico)
+      <label>Chi legge le risposte (microfono classico e testo)
+        <select id="set-voice-engine">
+          <option value="naturale">Voce naturale di JARVIS (Gemini) — consigliata</option>
+          <option value="chrome">Voce di Chrome — più robotica, ma senza attese</option>
+        </select>
+      </label>
+      <label>Voce di Chrome (solo se scelta sopra o come riserva)
         <select id="set-voice"></select>
       </label>
 
@@ -448,6 +456,6 @@
       document.head.appendChild(l);
     });
   </script>
-  <script type="module" src="js/app.js?v=202611171555"></script>
+  <script type="module" src="js/app.js?v=202611171614"></script>
 </body>
 </html>

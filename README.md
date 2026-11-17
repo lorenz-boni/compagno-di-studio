@@ -71,11 +71,15 @@ Alla prima apertura una **presentazione guidata** chiede:
 
 Ogni passo si può saltare. Tutto si cambia in ⚙️ Impostazioni, da dove si può anche rivedere la presentazione.
 
+**Widget** (icona accanto alle impostazioni, in alto a destra): una mini barra con il nucleo e i comandi essenziali, solo icone: Parla con JARVIS, microfono classico, Pausa, Silenzio, Ho finito. In Chrome è una finestrella **sempre sopra le altre app** (Document Picture-in-Picture), da tenere accanto a Obsidian, PDF o Word mentre scorri gli appunti, e si sposta dove vuoi. Scorciatoie: Spazio = pausa/riprendi, Invio = ho finito. Nei browser senza questa funzione diventa un riquadro trascinabile dentro la pagina, fisso anche scorrendo, che ricorda la posizione.
+
+**Voce naturale anche senza chiamata**: le risposte vengono lette dalla voce di Gemini scelta (le stesse 8 voci di "Parla con JARVIS") invece che da quella di Chrome. Se Gemini non risponde si passa da soli alla voce di Chrome per qualche minuto. Si può scegliere in ⚙️ Impostazioni → *Chi legge le risposte*.
+
 **⏸ Pausa / ▶ Riprendi** (barra in basso): JARVIS si ferma a metà e smette di ascoltare, poi riparte da dove era rimasto. Con la voce di Chrome ripete la frase interrotta. Se dici o scrivi qualcosa di nuovo esce da solo dalla pausa. **Silenzio** invece interrompe la risposta in corso.
 
 **Velocità di parola** (⚙️ Impostazioni): da "molto lenta" a "veloce", per entrambe le voci. Con "Parla con JARVIS" la velocità viene chiesta al modello, perché Gemini Live non ha un comando diretto, e vale anche se la cambi durante la chiamata.
 
-La voce naturale è quella di **Parla con JARVIS** (Gemini Live). Il microfono classico usa la voce di Chrome, più meccanica.
+
 
 ## Condividerla con un amico
 
@@ -113,6 +117,7 @@ Poi apri <http://localhost:8000>.
 - `js/vault.js`: lettura e scrittura della cartella degli appunti.
 - `js/docs.js`: lettura di PDF e Word (librerie in `vendor/`, caricate solo quando servono).
 - `js/study.js`: annotatore dei progressi (argomento, concetti, errori) e memoria per JARVIS.
+- `js/widget.js`: widget sempre in primo piano.
 - `js/ui.js`: interfaccia (pannelli, nucleo animato, onde, indicatore di connessione, contesto).
 - `tests/*.cjs`: prove automatiche con Playwright (Gemini, Gemini Live e microfono simulati). Si lanciano con `node tests/<nome>.cjs .`
 - `PIANO.md`: piano di sviluppo.
