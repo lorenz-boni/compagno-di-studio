@@ -1,8 +1,8 @@
-import { streamChat, complete, listModels, benchmark, FALLBACK_MODELS } from './gemini.js';
-import { Listener, speechSupported } from './speech.js';
-import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js';
-import { buildSystem, FINISHED_PREFIX, START_QUIZ, summaryRequest, VAULT_TOOLS } from './prompts.js';
+import { streamChat, complete, listModels, benchmark, FALLBACK_MODELS } from './gemini.js?v=202611171114';
+import { Listener, speechSupported } from './speech.js?v=202611171114';
+import { Speaker, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171114';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171114';
+import { buildSystem, FINISHED_PREFIX, START_QUIZ, summaryRequest, VAULT_TOOLS } from './prompts.js?v=202611171114';
 
 const $ = (s) => document.querySelector(s);
 
@@ -692,13 +692,20 @@ function init() {
     out.replaceChildren();
     const current = $('#set-model').value.trim() || DEFAULTS.model;
     const models = [...new Set([current, 'gemini-flash-latest', ...FALLBACK_MODELS])];
-    const rows = await benchmark(key, models, (r) => {
+    let rows = [];
+    try {
+    rows = await benchmark(key, models, (r) => {
       const li = document.createElement('li');
       const ok = r.status === 'ok';
       li.innerHTML = `<button type="button" class="ghost small" ${ok ? '' : 'disabled'}>Usa</button> <strong>${escapeHtml(r.model)}</strong>: ${ok ? `${(r.ms / 1000).toFixed(1)} s` : escapeHtml(String(r.status))}`;
       li.querySelector('button').onclick = () => { $('#set-model').value = r.model; };
       out.append(li);
     });
+    } catch (err) {
+      const li = document.createElement('li');
+      li.textContent = `Errore durante la prova: ${err.message}`;
+      out.append(li);
+    }
     const best = rows.filter((r) => r.status === 'ok').sort((a, b) => a.ms - b.ms)[0];
     if (best) {
       $('#set-model').value = best.model;

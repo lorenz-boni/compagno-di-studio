@@ -200,3 +200,5 @@ dialog:has(.wide) { width: min(760px, calc(100vw - 32px)); }
 }
 .bench { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; }
 .bench:empty { display: none; }
+#fatal { background: var(--danger); color: #fff; padding: 0.6rem 1rem; font-size: 0.95rem; }
+.version { font-size: 0.6em; font-weight: normal; color: var(--muted); }

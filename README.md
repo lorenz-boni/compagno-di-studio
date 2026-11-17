@@ -54,3 +54,4 @@ Poi apri <http://localhost:8000>.
 - `js/vault.js`: lettura e scrittura del vault Obsidian.
 - `tests/smoke.cjs`: prova automatica con Playwright, con Gemini e microfono simulati.
 - `PIANO.md`: piano di sviluppo.
+- `tools/bump-version.sh`: da lanciare prima di ogni commit che cambia l'app. Aggiorna il numero di versione nei link ai file, così Chrome non usa file vecchi dalla cache.
