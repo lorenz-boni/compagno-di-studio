@@ -28,7 +28,8 @@ const serve = require('./_server.cjs');
     if (pip) {
       await pip.waitForSelector('.jw');
       const buttons = await pip.$$eval('.jw button', (b) => b.map((x) => x.getAttribute('aria-label')));
-      ok(buttons.length === 6, `comandi solo a icone: ${buttons.join(' · ')}`);
+      ok(buttons.length === 5, `comandi solo a icone: ${buttons.join(' · ')}`);
+      ok((await pip.textContent('.jw-state')) === 'In attesa', 'stato mostrato sotto il nome');
       ok(!(await pip.$$eval('.jw button', (b) => b.some((x) => x.textContent.trim()))), 'nessuna scritta sui pulsanti');
       await pip.click('[data-a="pause"]');
       ok(await page.getAttribute('#btn-pause', 'aria-pressed') === 'true' && await pip.getAttribute('[data-a="pause"]', 'aria-pressed') === 'true', 'Pausa dal widget mette in pausa JARVIS');
@@ -36,9 +37,17 @@ const serve = require('./_server.cjs');
       ok(await page.getAttribute('#btn-pause', 'aria-pressed') === 'false', 'Spazio riprende');
       await pip.click('[data-a="mic"]');
       ok((await pip.getAttribute('.jw', 'data-core')) === 'listening' && (await page.textContent('#btn-mic .lbl')) === 'Smetti di ascoltare', 'microfono acceso dal widget, nucleo in ascolto');
+      ok((await pip.textContent('.jw-state')) === 'Ti ascolto', 'stato: Ti ascolto');
+      // Fotografie alle dimensioni reali della finestrella (Chrome può imporne una più alta di quella chiesta)
+      for (const [w, h] of [[433, 250], [380, 210], [300, 190], [420, 96]]) {
+        await pip.setViewportSize({ width: w, height: h });
+        await pip.waitForTimeout(150);
+        const over = await pip.evaluate(() => [...document.querySelectorAll('.jw button')].some((b) => { const r = b.getBoundingClientRect(); return r.right > innerWidth + 0.5 || r.bottom > innerHeight + 0.5 || r.left < -0.5; }));
+        ok(!over, `${w}×${h}: nessun pulsante tagliato`);
+        await pip.screenshot({ path: `${shots}/widget-pip-${w}x${h}.png` });
+      }
       await pip.click('[data-a="mic"]');
-      await pip.screenshot({ path: `${shots}/widget-pip.png` });
-      await pip.click('[data-a="back"]');
+      await pip.close();
       await page.waitForTimeout(300);
       ok(await page.getAttribute('#btn-widget', 'aria-pressed') === 'false', 'chiuso dal widget stesso');
     }

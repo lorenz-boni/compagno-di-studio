@@ -1,18 +1,18 @@
-import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171614';
-import { Listener, speechSupported } from './speech.js?v=202611171614';
-import { Speaker, cleanForSpeech, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171614';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, readNoteFull, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171614';
-import { buildSystem, TONES, rateLabel, speedInstruction, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171614';
+import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171618';
+import { Listener, speechSupported } from './speech.js?v=202611171618';
+import { Speaker, cleanForSpeech, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171618';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, readNoteFull, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171618';
+import { buildSystem, TONES, rateLabel, speedInstruction, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171618';
 
-import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171614';
-import { LiveSession, NaturalReader, pickLiveModels, LIVE_VOICES, previewVoice, playChunks, DEFAULT_LIVE_VOICE, SAFE_LIVE_VOICE, CLASSIC_VOICES } from './live.js?v=202611171614';
-import { createWidget } from './widget.js?v=202611171614';
-import { mountVoicePicker } from './voicepicker.js?v=202611171614';
-import { createOnboarding } from './onboarding.js?v=202611171614';
-import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611171614';
-import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611171614';
-import { stripExt, isMarkdown, kindOf, extractText, fileToBase64, OCR_PROMPT, ACCEPT } from './docs.js?v=202611171614';
-import { dbGet, dbPut } from './db.js?v=202611171614';
+import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171618';
+import { LiveSession, NaturalReader, pickLiveModels, LIVE_VOICES, previewVoice, playChunks, DEFAULT_LIVE_VOICE, SAFE_LIVE_VOICE, CLASSIC_VOICES } from './live.js?v=202611171618';
+import { createWidget } from './widget.js?v=202611171618';
+import { mountVoicePicker } from './voicepicker.js?v=202611171618';
+import { createOnboarding } from './onboarding.js?v=202611171618';
+import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611171618';
+import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611171618';
+import { stripExt, isMarkdown, kindOf, extractText, fileToBase64, OCR_PROMPT, ACCEPT } from './docs.js?v=202611171618';
+import { dbGet, dbPut } from './db.js?v=202611171618';
 
 const $ = (s) => document.querySelector(s);
 
