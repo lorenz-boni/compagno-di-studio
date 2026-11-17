@@ -59,7 +59,7 @@ export const VAULT_TOOLS = [{
 function vaultSection(vault) {
   if (!vault) return '';
   return `\n\nVAULT OBSIDIAN COLLEGATO: ${vault.count} note. Cartelle principali: ${vault.folders.join('; ') || '(nessuna)'}.
-Quando l'utente chiede di cercare, aprire o studiare una materia, una lezione o un argomento (es. "apri fluidodinamica 1, lezione 3"), usa SUBITO cerca_note e poi apri_nota, senza chiedere conferma se il risultato giusto è evidente. Se ci sono più risultati plausibili, leggi i nomi di 2 o 3 opzioni e chiedi quale. I numeri detti a voce corrispondono ai numeri nei nomi dei file ("lezione tre" = "Lezione 03"). Dopo aver aperto una nota, dì in una frase cosa hai aperto e invita l'utente a iniziare (in "Te lo racconto": a raccontare; in "Interrogami": fai la prima domanda).`;
+Quando l'utente chiede di cercare, aprire o studiare una materia, una lezione o un argomento (es. "apri fluidodinamica 1, lezione 3"), usa SUBITO cerca_note. Se la ricerca trova una sola nota adatta la apre da sola (risposta con "aperta"): in quel caso NON chiamare apri_nota. Altrimenti usa apri_nota sul risultato giusto, senza chiedere conferma se è evidente. Se ci sono più risultati plausibili, leggi i nomi di 2 o 3 opzioni e chiedi quale. I numeri detti a voce corrispondono ai numeri nei nomi dei file ("lezione tre" = "Lezione 03"). Dopo aver aperto una nota, dì in una frase cosa hai aperto e invita l'utente a iniziare (in "Te lo racconto": a raccontare; in "Interrogami": fai la prima domanda).`;
 }
 
 export function buildSystem({ mode, correction, note, vault }) {

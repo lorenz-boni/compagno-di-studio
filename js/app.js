@@ -36,6 +36,8 @@ let controller = null; // risposta in corso
 let buffer = ''; // ciò che hai detto e non è ancora stato inviato
 let silenceTimer = null;
 let lastSpeechEnd = 0;
+let thinkingSince = 0;
+let lastTiming = '';
 
 const MODE_HELP = {
   racconto: () => settings.correction === 'fine'
@@ -132,19 +134,31 @@ function vaultInfo() {
   return vault.root ? { count: vault.notes.length, folders: folderOverview(vault.notes) } : null;
 }
 
+const FIRST_TOKEN_TIMEOUT = 25000;
+
 async function respond() {
   const ctrl = new AbortController();
   controller = ctrl;
+  const started = performance.now();
+  thinkingSince = Date.now();
   updateStatus();
   const bubble = addBubble('bot', '…');
   let full = '';
   let parts = [];
+  let timedOut = false;
+  let timer = null;
+  let firstAt = 0;
+  let modelVersion = '';
+  // Se nel frattempo è partita un'altra risposta (hai parlato di nuovo), questa non deve più toccare la cronologia.
+  const current = () => controller === ctrl && !ctrl.signal.aborted;
   try {
-    // Il modello può usare gli strumenti del vault (cerca/apri nota) prima di rispondere: al massimo 4 passaggi.
+    // Il modello può usare gli strumenti del vault prima di rispondere: al massimo 4 passaggi.
     for (let step = 0; step < 4; step++) {
       parts = [];
       let pending = '';
       if (full && !/\s$/.test(full)) full += ' ';
+      clearTimeout(timer);
+      timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, FIRST_TOKEN_TIMEOUT);
       const stream = streamChat({
         key: settings.key,
         model: settings.model || DEFAULTS.model,
@@ -155,6 +169,9 @@ async function respond() {
         signal: ctrl.signal,
       });
       for await (const chunk of stream) {
+        clearTimeout(timer);
+        if (!firstAt) firstAt = performance.now();
+        if (chunk.modelVersion) modelVersion = chunk.modelVersion;
         parts.push(...chunk.parts);
         if (!chunk.text) continue;
         full += chunk.text;
@@ -165,7 +182,9 @@ async function respond() {
         renderInto(bubble, full);
         scrollLog();
       }
+      clearTimeout(timer);
       splitSentences(pending, true)[0].forEach((x) => speaker.say(x));
+      if (!current()) return;
 
       const calls = parts.filter((p) => p.functionCall);
       if (parts.length) history.push({ role: 'model', parts });
@@ -175,24 +194,32 @@ async function respond() {
       for (const c of calls) {
         responses.push({ functionResponse: { name: c.functionCall.name, response: await runTool(c.functionCall) } });
       }
+      if (!current()) { history.pop(); return; } // chiamata rimasta senza risposta: la togliamo
       history.push({ role: 'user', parts: responses });
       $('#log').append(bubble); // la risposta va sotto ai messaggi "Cerco… / Appunti…"
     }
   } catch (err) {
-    if (err.name !== 'AbortError') addBubble('error', err.message || String(err));
+    if (timedOut) addBubble('error', `Gemini non ha risposto entro ${FIRST_TOKEN_TIMEOUT / 1000} secondi. Riprova; se succede spesso, nelle impostazioni scegli un modello più veloce (es. gemini-flash-lite-latest).`);
+    else if (err.name !== 'AbortError') addBubble('error', err.message || String(err));
   } finally {
-    // Risposta interrotta: teniamo il testo già detto, ma mai una chiamata a strumento rimasta senza risposta.
-    if (parts.some((p) => p.text) && !parts.some((p) => p.functionCall)) {
-      history.push({ role: 'model', parts: parts.filter((p) => p.text) });
+    clearTimeout(timer);
+    if (controller === ctrl) {
+      // Risposta interrotta parlandoci sopra: teniamo il testo già detto, mai una chiamata a strumento senza risposta.
+      if (parts.some((p) => p.text) && !parts.some((p) => p.functionCall)) {
+        history.push({ role: 'model', parts: parts.filter((p) => p.text) });
+      }
+      const last = history[history.length - 1];
+      if (last?.role === 'model' && last.parts.some((p) => p.functionCall)) history.pop();
+      controller = null;
     }
-    const last = history[history.length - 1];
-    if (last?.role === 'model' && last.parts.some((p) => p.functionCall)) history.pop();
     if (full.trim()) {
-      if (ctrl.signal.aborted) renderInto(bubble, `${full} …`);
+      if (ctrl.signal.aborted && !timedOut) renderInto(bubble, `${full} …`);
     } else {
       bubble.remove();
     }
-    if (controller === ctrl) controller = null;
+    if (firstAt) {
+      lastTiming = `Risposta iniziata dopo ${((firstAt - started) / 1000).toFixed(1)} s${modelVersion ? ` · ${modelVersion}` : ''}`;
+    }
     updateStatus();
   }
 }
@@ -200,8 +227,20 @@ async function respond() {
 async function runTool({ name, args = {} }) {
   if (!vault.root) return { errore: 'Nessun vault collegato.' };
   if (name === 'cerca_note') {
-    const risultati = searchNotes(vault.notes, String(args.query || ''));
-    addBubble('info', `🔎 Cerco «${args.query}»: ${risultati.length ? `${risultati.length} risultati` : 'nessun risultato'}.`);
+    const query = String(args.query || '');
+    const risultati = searchNotes(vault.notes, query);
+    // Se una sola nota contiene tutte le parole cercate (o vince nettamente), la apriamo subito:
+    // si risparmia un passaggio con Gemini e la risposta arriva prima.
+    const strict = searchNotes(vault.notes, query, 2, { requireAll: true, withScore: true });
+    const clear = strict.length === 1 || (strict.length === 2 && strict[0].score >= strict[1].score + 2);
+    if (clear) {
+      const n = vault.notes.find((x) => x.path === strict[0].path);
+      try {
+        await openNote(n);
+        return { aperta: n.path, altri_risultati: risultati.filter((p) => p !== n.path).slice(0, 5), inizio: note.text.slice(0, 600) };
+      } catch { /* se non si legge, restituiamo solo i risultati */ }
+    }
+    addBubble('info', `🔎 Cerco «${query}»: ${risultati.length ? `${risultati.length} risultati` : 'nessun risultato'}.`);
     return risultati.length ? { risultati } : { risultati: [], cartelle_disponibili: folderOverview(vault.notes) };
   }
   if (name === 'apri_nota') {
@@ -267,11 +306,17 @@ function showLive(text) {
   el.textContent = text.trim();
   el.hidden = !text.trim();
 }
+setInterval(() => { if (controller) updateStatus(); }, 1000);
+
 function updateStatus() {
   const el = $('#status');
   let text = 'Pronto.';
   let cls = '';
-  if (controller) { text = 'Il compagno sta pensando…'; cls = 'thinking'; }
+  if (controller) {
+    const secs = Math.floor((Date.now() - thinkingSince) / 1000);
+    text = `Il compagno sta pensando…${secs >= 2 ? ` ${secs} s` : ''}`;
+    cls = 'thinking';
+  }
   else if (speaker.speaking) { text = 'Il compagno sta parlando… (parla pure per interromperlo)'; cls = 'speaking'; }
   else if (listener.active) {
     cls = 'listening';
@@ -279,6 +324,7 @@ function updateStatus() {
       ? 'Ti ascolto… premi "Ho finito" quando hai concluso.'
       : 'Ti ascolto…';
   }
+  if (!controller && lastTiming) text += ` · ${lastTiming}`;
   el.textContent = text;
   el.className = `status ${cls}`;
 }

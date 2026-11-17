@@ -135,7 +135,7 @@ export function tokens(s) {
  * Restituisce le note più simili alla richiesta, dalla più probabile.
  * `requireAll`: ogni parola cercata deve comparire (ricerca mentre scrivi, come in Obsidian).
  */
-export function searchNotes(notes, query, limit = 12, { requireAll = false } = {}) {
+export function searchNotes(notes, query, limit = 12, { requireAll = false, withScore = false } = {}) {
   const q = [...new Set(tokens(query))];
   if (!q.length) return [];
   const scored = notes.map((n) => {
@@ -157,7 +157,7 @@ export function searchNotes(notes, query, limit = 12, { requireAll = false } = {
     .filter((s) => s.score > 0)
     .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path, 'it', { numeric: true }))
     .slice(0, limit)
-    .map((s) => s.path);
+    .map((s) => (withScore ? s : s.path));
 }
 
 /** Cartelle del vault (primi due livelli), per far capire al modello come è organizzato. */

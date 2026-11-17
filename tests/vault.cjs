@@ -22,9 +22,11 @@ const srv = http.createServer((req, res) => {
     let parts;
     const fr = last.parts.find((p) => p.functionResponse);
     if (!fr) parts = [{ functionCall: { name: 'cerca_note', args: { query: 'fluidodinamica 1 lezione 3' } }, thoughtSignature: 'sig1' }];
-    else if (fr.functionResponse.name === 'cerca_note') parts = [{ functionCall: { name: 'apri_nota', args: { percorso: fr.functionResponse.response.risultati[0] } } }];
+    else if (fr.functionResponse.name === 'cerca_note' && !fr.functionResponse.response.aperta) parts = [{ functionCall: { name: 'apri_nota', args: { percorso: fr.functionResponse.response.risultati[0] } } }];
     else parts = [{ text: `Ho aperto ${fr.functionResponse.response.aperta}. Inizia pure a raccontare.` }];
-    const sse = `data: ${JSON.stringify({ candidates: [{ content: { role: 'model', parts } }] })}\n\n`;
+    const steps = body.contents.filter((c) => c.parts.some((p) => p.functionResponse)).length;
+    if (parts[0].text) console.log('passaggi con Gemini per aprire la nota:', steps + 1);
+    const sse = `data: ${JSON.stringify({ candidates: [{ content: { role: 'model', parts } }], modelVersion: 'gemini-test' })}\n\n`;
     await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: sse });
   });
   await page.addInitScript(() => {
@@ -66,6 +68,7 @@ const srv = http.createServer((req, res) => {
   console.log('nota aperta:', await page.textContent('#current-title'));
   console.log('evidenziata nell\'albero:', await page.$$eval('.tree-note[aria-current="true"]', (b) => b.map((x) => x.title)));
   const lastBody = bodies[bodies.length - 1];
+  console.log('stato:', await page.textContent('#status'));
   console.log('appunti nel prompt:', lastBody.systemInstruction.parts[0].text.includes('Teorema di Bernoulli'));
   console.log('firma conservata:', JSON.stringify(lastBody.contents).includes('sig1'));
   console.log('strumenti inviati:', lastBody.tools[0].functionDeclarations.map((f) => f.name).join(','));

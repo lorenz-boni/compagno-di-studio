@@ -50,6 +50,9 @@ function post(model, key, body, signal) {
   });
 }
 
+const THINKING = [{ thinkingBudget: 0 }, { thinkingLevel: 'minimal' }, { thinkingLevel: 'low' }, null];
+const thinkingChoice = new Map();
+
 /**
  * Risposta in streaming: per ogni pezzo restituisce { text, parts }.
  * `text` è il testo da mostrare/leggere, `parts` sono le parti originali
@@ -64,12 +67,22 @@ export async function* streamChat({ key, model, system, contents, tools, fast = 
     generationConfig: { temperature: 0.5 },
   };
   if (tools) body.tools = tools;
-  if (fast) body.generationConfig.thinkingConfig = { thinkingBudget: 0 };
 
-  let res = await post(model, key, body, signal);
-  if (res.status === 400 && fast) {
-    delete body.generationConfig.thinkingConfig;
+  // Modalità rapida: proviamo i modi di ridurre il "ragionamento" nell'ordine; il primo accettato dal
+  // modello viene ricordato. (Gemini 2.5 usa thinkingBudget, Gemini 3 usa thinkingLevel.)
+  let res;
+  let i = fast ? (thinkingChoice.get(model) ?? 0) : THINKING.length - 1;
+  for (;;) {
+    const cfg = THINKING[i];
+    if (cfg) body.generationConfig.thinkingConfig = cfg;
+    else delete body.generationConfig.thinkingConfig;
     res = await post(model, key, body, signal);
+    if (res.status === 400 && cfg) {
+      const detail = await res.clone().text();
+      if (/thinking/i.test(detail)) { i++; continue; }
+    }
+    if (res.ok && fast) thinkingChoice.set(model, i);
+    break;
   }
   if (!res.ok) throw await toError(res);
 
@@ -91,7 +104,7 @@ export async function* streamChat({ key, model, system, contents, tools, fast = 
       try { json = JSON.parse(data); } catch { continue; }
       const parts = json?.candidates?.[0]?.content?.parts || [];
       const text = parts.filter((p) => !p.thought && p.text).map((p) => p.text).join('');
-      if (parts.length) yield { text, parts };
+      if (parts.length) yield { text, parts, modelVersion: json.modelVersion };
     }
   }
 }
