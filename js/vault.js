@@ -1,5 +1,5 @@
-import { isSupported, stripExt, extractText } from './docs.js?v=202611180944';
-import { dbGet, dbPut } from './db.js?v=202611180944';
+import { isSupported, stripExt, extractText } from './docs.js?v=202611181007';
+import { dbGet, dbPut } from './db.js?v=202611181007';
 
 // Accesso diretto alla cartella del vault Obsidian con la File System Access API (Chrome/Edge su PC).
 
@@ -18,18 +18,24 @@ export async function ensurePermission(handle, mode = 'read') {
 }
 
 /** Elenca ricorsivamente tutti gli appunti del vault o della cartella: Markdown, testo, PDF e Word (.docx). */
-export async function listNotes(dir, prefix = '') {
+export async function listNotes(dir, prefix = '', skipped = {}) {
   const out = [];
   for await (const [name, handle] of dir.entries()) {
     if (name.startsWith('.') && handle.kind === 'directory') continue;
     if (handle.kind === 'directory') {
       if (SKIP_DIRS.has(name)) continue;
-      out.push(...(await listNotes(handle, `${prefix}${name}/`)));
-    } else if (isSupported(name) && !name.startsWith('~$')) { // ~$… = file temporanei di Word
+      out.push(...(await listNotes(handle, `${prefix}${name}/`, skipped)));
+    } else if (isSupported(name) && !name.startsWith('~$') && !name.startsWith('.')) { // ~$… = file temporanei di Word
       out.push({ path: `${prefix}${name}`, handle });
+    } else if (!name.startsWith('~$') && name !== '.DS_Store') {
+      // file che non sappiamo leggere: li contiamo per spiegarlo (".nome.pdf.icloud" = file rimasto solo su iCloud)
+      const ext = name.endsWith('.icloud') ? 'icloud' : (/\.([a-z0-9]+)$/i.exec(name)?.[1] || '').toLowerCase();
+      if (ext && !name.startsWith('.') || ext === 'icloud') skipped[ext] = (skipped[ext] || 0) + 1;
     }
   }
-  return out.sort((a, b) => a.path.localeCompare(b.path, 'it', { numeric: true }));
+  const sorted = out.sort((a, b) => a.path.localeCompare(b.path, 'it', { numeric: true }));
+  sorted.skipped = skipped;
+  return sorted;
 }
 
 export async function readNote(fileHandle) {

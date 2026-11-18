@@ -54,6 +54,9 @@ Con **Collega cartella appunti** puoi scegliere un vault Obsidian oppure **quals
 - **Markdown** e **testo** (.md, .txt);
 - **PDF**: il testo viene estratto pagina per pagina con pdf.js di Mozilla;
 - **Word .docx**: titoli, paragrafi, elenchi e tabelle, con mammoth. Il vecchio formato .doc va prima salvato come .docx.
+- **PowerPoint .pptx**: slide in ordine, con titoli, punti e note del relatore. **OpenDocument .odt**: titoli ed elenchi. Questi due formati sono letti senza librerie, con la decompressione del browser.
+- Se nella cartella ci sono file che non sa leggere (Pages/Keynote, .doc/.ppt, foto, file rimasti solo su iCloud), JARVIS dice quali sono e come convertirli.
+- **Mac**: Chrome non apre le cartelle di iCloud Drive, Google Drive e OneDrive, che stanno dentro *Libreria*. Copia gli appunti in una cartella dentro Documenti.
 
 Il testo viene estratto **nel browser**, senza caricare i file da nessuna parte.
 

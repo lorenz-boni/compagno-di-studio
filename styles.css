@@ -762,3 +762,5 @@ dialog.welcome { width: min(720px, calc(100vw - 32px)); }
 .btn-dock[aria-pressed="true"]#btn-pause { border-color: var(--orange); color: var(--orange); box-shadow: 0 0 0 1px rgb(255 181 71 / 0.3); }
 .btn-dock[aria-pressed="true"]#btn-pause .ic { color: var(--orange); }
 .warn-text { color: var(--orange) !important; }
+.badge-pptx { color: #FFB27D; }
+.badge-odt { color: #8FE3B0; }

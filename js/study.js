@@ -1,7 +1,7 @@
 // Annotatore dei progressi: dopo ogni scambio legge la frase dell'utente e la risposta di JARVIS
 // ed estrae argomento, concetti chiari, concetti da consolidare ed errori. Gira in background,
 // quindi non rallenta la conversazione. Registra solo ciò che emerge davvero dallo scambio.
-import { complete } from './gemini.js?v=202611180944';
+import { complete } from './gemini.js?v=202611181007';
 
 const SCHEMA = {
   type: 'OBJECT',

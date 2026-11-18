@@ -2,7 +2,7 @@ JARVIS · COMPAGNO DI STUDIO
 ===========================
 
 Un assistente vocale per studiare: gli racconti la lezione e lui ti ascolta e ti corregge,
-partendo dai TUOI appunti (PDF, Word, Markdown/Obsidian). Puoi anche farti spiegare gli
+partendo dai TUOI appunti (PDF, Word, PowerPoint, Markdown/Obsidian). Puoi anche farti spiegare gli
 appunti o farti interrogare. È gratis.
 
 
@@ -63,6 +63,13 @@ COME SI STUDIA
 - «Facciamo il punto» scrive un resoconto; a destra vedi argomento, concetti chiari,
   da consolidare ed errori. Le conversazioni si salvano da sole (scheda Cronologia).
 - Se Gemini è lento o sovraccarico: ⚙️ Impostazioni → «Prova velocità modelli».
+
+
+SU MAC: CARTELLE DI ICLOUD / GOOGLE DRIVE
+-----------------------------------------
+Chrome non apre le cartelle di iCloud Drive, Google Drive e OneDrive del Mac («contiene file di
+sistema»): copia gli appunti in una cartella dentro Documenti (o sulla Scrivania) e scegli quella.
+I file di Pages/Keynote vanno esportati in PDF (File → Esporta in → PDF).
 
 
 SE LA CHIAVE «NON HA IL PIANO GRATUITO»

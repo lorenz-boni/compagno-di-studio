@@ -47,6 +47,7 @@ const serve = require('./_server.cjs');
     const fx = (n) => mkFile(n, `/tests/fixtures/${encodeURIComponent(n)}`);
     window.__root = mkDir('Appunti', [mkDir('Acqua ed energia', [
       fx('Lezione 1 - Ciclo idrologico.pdf'), fx('Lezione 2 - Darcy scansione.pdf'), fx('Lezione 3 - Nitrificazione.docx'),
+      fx('Lezione 4 - Depurazione (slide).pptx'), fx('Lezione 5 - Idrogeologia.odt'),
       mkFile('~$Lezione 3 - Nitrificazione.docx'), mkFile('foto.png'),
     ])]);
     window.showDirectoryPicker = async () => window.__root;
@@ -57,7 +58,15 @@ const serve = require('./_server.cjs');
   await page.click('summary:has-text("Acqua ed energia")');
   await page.waitForSelector('.tree-note');
   const items = await page.$$eval('.tree-note', (b) => b.map((x) => x.textContent.trim()));
-  ok(items.length === 3, `elenco: ${JSON.stringify(items)} (niente file temporanei di Word né immagini)`);
+  ok(items.length === 5, `elenco: ${JSON.stringify(items)} (niente file temporanei di Word né immagini)`);
+  await page.click('.tree-note:has-text("Depurazione")');
+  await page.waitForFunction(() => document.querySelector('#current-text').textContent.includes('Fanghi'), null, { timeout: 15000 });
+  const ppt = await page.textContent('#current-text');
+  ok(ppt.includes('--- Slide 1 ---') && ppt.includes('## Trattamenti primari') && ppt.includes('- Grigliatura') && ppt.includes('Note del relatore: Ricordare il tempo di ritenzione') && ppt.indexOf('Riepilogo') > ppt.indexOf('Fanghi'), 'PowerPoint: slide in ordine, titoli, punti e note del relatore');
+  await page.click('.tree-note:has-text("Idrogeologia")');
+  await page.waitForFunction(() => document.querySelector('#current-text').textContent.includes('Darcy lega'), null, { timeout: 15000 });
+  const odt = await page.textContent('#current-text');
+  ok(odt.includes('# Idrogeologia') && odt.includes('- Conducibilità idraulica'), 'OpenDocument: titoli ed elenchi');
   ok(items.some((t) => t.includes('PDF')) && items.some((t) => t.includes('DOCX')), 'etichette PDF e DOCX');
 
   // PDF con testo

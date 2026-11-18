@@ -1,18 +1,18 @@
-import { streamChat, complete, isNoFreeTier, NO_FREE_TIER_MSG, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611180944';
-import { Listener, speechSupported } from './speech.js?v=202611180944';
-import { Speaker, cleanForSpeech, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611180944';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, readNoteFull, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611180944';
-import { buildSystem, TONES, rateLabel, speedInstruction, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611180944';
+import { streamChat, complete, isNoFreeTier, NO_FREE_TIER_MSG, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611181007';
+import { Listener, speechSupported } from './speech.js?v=202611181007';
+import { Speaker, cleanForSpeech, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611181007';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, readNoteFull, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611181007';
+import { buildSystem, TONES, rateLabel, speedInstruction, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611181007';
 
-import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611180944';
-import { LiveSession, NaturalReader, testLive, pickLiveModels, LIVE_VOICES, previewVoice, playChunks, DEFAULT_LIVE_VOICE, SAFE_LIVE_VOICE, CLASSIC_VOICES } from './live.js?v=202611180944';
-import { createWidget } from './widget.js?v=202611180944';
-import { mountVoicePicker } from './voicepicker.js?v=202611180944';
-import { createOnboarding } from './onboarding.js?v=202611180944';
-import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611180944';
-import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611180944';
-import { stripExt, isMarkdown, kindOf, extractText, fileToBase64, OCR_PROMPT, ACCEPT } from './docs.js?v=202611180944';
-import { dbGet, dbPut } from './db.js?v=202611180944';
+import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611181007';
+import { LiveSession, NaturalReader, testLive, pickLiveModels, LIVE_VOICES, previewVoice, playChunks, DEFAULT_LIVE_VOICE, SAFE_LIVE_VOICE, CLASSIC_VOICES } from './live.js?v=202611181007';
+import { createWidget } from './widget.js?v=202611181007';
+import { mountVoicePicker } from './voicepicker.js?v=202611181007';
+import { createOnboarding } from './onboarding.js?v=202611181007';
+import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611181007';
+import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611181007';
+import { stripExt, describeSkipped, isMarkdown, kindOf, extractText, fileToBase64, OCR_PROMPT, ACCEPT } from './docs.js?v=202611181007';
+import { dbGet, dbPut } from './db.js?v=202611181007';
 
 const $ = (s) => document.querySelector(s);
 
@@ -1146,8 +1146,13 @@ async function openVault(handle, { quiet = false } = {}) {
     status.textContent = `✅ Collegato a «${handle.name}» · ${vault.notes.length} note`;
     renderNoteList();
     importFromVault(handle).then((n) => { if (n) renderSessions(); });
+    const sk = describeSkipped(vault.notes.skipped || {});
     if (!vault.notes.length) {
-      addBubble('error', `Nella cartella «${handle.name}» non ho trovato appunti (Markdown, PDF, Word .docx o testo). Scegli la cartella che contiene i tuoi appunti, non una sottocartella di sole immagini.`);
+      addBubble('error', `Nella cartella «${handle.name}» non ho trovato appunti che so leggere (PDF, Word .docx, PowerPoint .pptx, OpenDocument .odt, Markdown o testo).`
+        + (sk.text ? ` Ho trovato invece: ${sk.text}.${sk.tips ? ` Cosa fare: ${sk.tips}.` : ''}`
+          : ' La cartella sembra vuota: controlla di aver scelto quella giusta. Se i file sono su iCloud Drive o Google Drive, potrebbero non essere scaricati sul computer.'));
+    } else if (sk.important) {
+      addBubble('info', `Cartella «${handle.name}» collegata: ${vault.notes.length} appunti. Ho saltato ${sk.text}: ${sk.tips}.`, { transient: true });
     } else if (!quiet) {
       addBubble('info', `Cartella «${handle.name}» collegata: ${vault.notes.length} appunti. Ora puoi dire, per esempio, «apri Fluidodinamica 1, lezione 3».`, { transient: true });
     }

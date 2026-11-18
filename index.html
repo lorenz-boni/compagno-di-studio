@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=202611180944">
+  <link rel="stylesheet" href="styles.css?v=202611181007">
 </head>
 <body data-core="idle">
   <!-- Icone (stile lineare, disegnate qui: nessuna libreria esterna) -->
@@ -66,7 +66,7 @@
       </svg>
       <div class="brand-text">
         <span class="brand-name">JARVIS</span>
-        <span class="brand-sub">Compagno di studio <small id="app-version" class="version">v202611180944</small></span>
+        <span class="brand-sub">Compagno di studio <small id="app-version" class="version">v202611181007</small></span>
       </div>
     </div>
 
@@ -105,7 +105,7 @@
         <button id="btn-vault-reopen" class="btn-primary small" hidden>↻ Ricollega vault</button>
         <span id="vault-status" class="vault-status" hidden></span>
         <div class="import-row">
-          <label class="btn-ghost small" title="PDF, Word (.docx), Markdown o testo"><svg class="ic"><use href="#i-upload"/></svg>Carica file<input id="file-input" type="file" accept=".md,.markdown,.txt,.pdf,.docx" multiple hidden></label>
+          <label class="btn-ghost small" title="PDF, Word (.docx), PowerPoint (.pptx), OpenDocument (.odt), Markdown o testo"><svg class="ic"><use href="#i-upload"/></svg>Carica file<input id="file-input" type="file" accept=".md,.markdown,.txt,.pdf,.docx,.pptx,.odt" multiple hidden></label>
           <button id="btn-paste" class="btn-ghost small"><svg class="ic"><use href="#i-clipboard"/></svg>Incolla testo</button>
         </div>
       </div>
@@ -125,7 +125,7 @@
           <pre id="current-text"></pre>
         </details>
       </div>
-      <p class="hint" id="notes-hint">Collega una volta sola la cartella dei tuoi appunti: un vault Obsidian oppure una cartella qualsiasi con <strong>PDF, Word (.docx), Markdown o testo</strong>. Poi basta dire, per esempio, «apri Fluidodinamica 1, lezione 3».</p>
+      <p class="hint" id="notes-hint">Collega una volta sola la cartella dei tuoi appunti: un vault Obsidian oppure una cartella qualsiasi con <strong>PDF, Word, PowerPoint, Markdown o testo</strong>. Poi basta dire, per esempio, «apri Fluidodinamica 1, lezione 3».</p>
     </aside>
 
     <!-- JARVIS -->
@@ -297,6 +297,7 @@
       <section class="wiz-pane" data-step="4" hidden>
         <h3>Dove sono i tuoi appunti?</h3>
         <p class="hint">Scegli la cartella con i tuoi appunti: un vault Obsidian oppure una cartella qualsiasi con <strong>PDF, Word (.docx), Markdown o testo</strong>. I file restano sul tuo computer. Chrome chiederà il permesso: scegli <strong>«Consenti a ogni visita»</strong>.</p>
+        <p class="hint"><strong>Su Mac:</strong> se Chrome dice che la cartella «contiene file di sistema», gli appunti sono in iCloud Drive, Google Drive o OneDrive, che Chrome per sicurezza non apre. Copiali in una cartella dentro <em>Documenti</em> (o sulla Scrivania) e scegli quella.</p>
         <button type="button" id="wz-folder" class="btn-primary">Collega cartella appunti</button>
         <span class="hint" id="wz-folder-status"></span>
       </section>
@@ -456,6 +457,6 @@
       document.head.appendChild(l);
     });
   </script>
-  <script type="module" src="js/app.js?v=202611180944"></script>
+  <script type="module" src="js/app.js?v=202611181007"></script>
 </body>
 </html>
