@@ -89,7 +89,7 @@ Ogni passo si può saltare. Tutto si cambia in ⚙️ Impostazioni, da dove si p
 
 ## Costi e privacy
 
-- **Gemini**: piano gratuito di Google AI Studio. In caso di errore 429 (quota finita) aspetta un minuto o cambia modello nelle impostazioni. Nel piano gratuito Google può usare i testi per migliorare i suoi servizi: non inserire dati sensibili.
+- **Gemini**: piano gratuito di Google AI Studio. Alcuni progetti, spesso creati con account universitari o aziendali, non hanno il piano gratuito: la verifica della chiave lo segnala e consiglia di creare la chiave con un account Gmail personale in un progetto nuovo. In caso di errore 429 (quota finita) aspetta un minuto o cambia modello nelle impostazioni. Nel piano gratuito Google può usare i testi per migliorare i suoi servizi: non inserire dati sensibili.
 - **Riconoscimento vocale**: quello di Chrome, gratis. L'audio viene elaborato dai server Google.
 - **Voce**: le voci italiane del tuo sistema, gratis.
 - La chiave e le impostazioni restano **solo nel tuo browser**. Non esiste un server dell'app.

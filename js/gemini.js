@@ -8,12 +8,26 @@ export class GeminiError extends Error {
   }
 }
 
+// Google a volte non concede il piano gratuito a un progetto (account universitari/aziendali, progetti segnalati…).
+export const NO_FREE_TIER_MSG = 'Google non concede l\'uso gratuito di Gemini a questa chiave: il progetto in cui è stata creata non ha il piano gratuito. '
+  + 'Prova a creare una chiave nuova con un account Gmail personale (non universitario o aziendale) in un progetto nuovo su aistudio.google.com/apikey. '
+  + 'In alternativa si può attivare la fatturazione su Google AI Studio (a pagamento).';
+
+export function isNoFreeTier(text) {
+  return /free tier is not available|set up billing|project has been denied access|denied access/i.test(String(text || ''));
+}
+
 async function toError(res) {
   let detail = '';
   try {
     const j = await res.json();
     detail = j?.error?.message || '';
   } catch { /* corpo non JSON */ }
+  if (isNoFreeTier(detail)) {
+    const e = new GeminiError(NO_FREE_TIER_MSG, res.status);
+    e.noFreeTier = true;
+    return e;
+  }
   if (res.status === 429) {
     return new GeminiError('Quota gratuita di Gemini esaurita per ora (anche sui modelli di riserva): aspetta un minuto e riprova.', 429);
   }
@@ -307,7 +321,9 @@ export async function benchmark(key, models, onResult, { timeoutMs = 15000 } = {
       } else {
         let detail = '';
         try { detail = (await r.res.json())?.error?.message || ''; } catch { /* corpo non JSON */ }
-        row = { model, ms, status: `errore ${r.status}`, detail: detail.slice(0, 160) };
+        row = isNoFreeTier(detail)
+          ? { model, ms, status: 'niente piano gratuito', detail: 'Google non concede l\'uso gratuito a questa chiave (vedi la guida: chiave da un account Gmail personale, progetto nuovo).' }
+          : { model, ms, status: `errore ${r.status}`, detail: detail.slice(0, 160) };
       }
     } catch (err) {
       row = { model, ms: Math.round(performance.now() - t0), status: err.name === 'AbortError' ? `oltre ${timeoutMs / 1000} s` : err.message };

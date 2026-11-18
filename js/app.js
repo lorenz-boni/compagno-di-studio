@@ -1,18 +1,18 @@
-import { streamChat, complete, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611171618';
-import { Listener, speechSupported } from './speech.js?v=202611171618';
-import { Speaker, cleanForSpeech, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611171618';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, readNoteFull, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611171618';
-import { buildSystem, TONES, rateLabel, speedInstruction, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611171618';
+import { streamChat, complete, isNoFreeTier, NO_FREE_TIER_MSG, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611180940';
+import { Listener, speechSupported } from './speech.js?v=202611180940';
+import { Speaker, cleanForSpeech, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611180940';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, readNoteFull, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611180940';
+import { buildSystem, TONES, rateLabel, speedInstruction, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611180940';
 
-import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611171618';
-import { LiveSession, NaturalReader, pickLiveModels, LIVE_VOICES, previewVoice, playChunks, DEFAULT_LIVE_VOICE, SAFE_LIVE_VOICE, CLASSIC_VOICES } from './live.js?v=202611171618';
-import { createWidget } from './widget.js?v=202611171618';
-import { mountVoicePicker } from './voicepicker.js?v=202611171618';
-import { createOnboarding } from './onboarding.js?v=202611171618';
-import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611171618';
-import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611171618';
-import { stripExt, isMarkdown, kindOf, extractText, fileToBase64, OCR_PROMPT, ACCEPT } from './docs.js?v=202611171618';
-import { dbGet, dbPut } from './db.js?v=202611171618';
+import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611180940';
+import { LiveSession, NaturalReader, pickLiveModels, LIVE_VOICES, previewVoice, playChunks, DEFAULT_LIVE_VOICE, SAFE_LIVE_VOICE, CLASSIC_VOICES } from './live.js?v=202611180940';
+import { createWidget } from './widget.js?v=202611180940';
+import { mountVoicePicker } from './voicepicker.js?v=202611180940';
+import { createOnboarding } from './onboarding.js?v=202611180940';
+import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611180940';
+import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611180940';
+import { stripExt, isMarkdown, kindOf, extractText, fileToBase64, OCR_PROMPT, ACCEPT } from './docs.js?v=202611180940';
+import { dbGet, dbPut } from './db.js?v=202611180940';
 
 const $ = (s) => document.querySelector(s);
 
@@ -114,7 +114,9 @@ const reader = new NaturalReader({
   onEnd: () => { lastSpeechEnd = Date.now(); updateStatus(); },
   onFail: (err, left) => {
     naturalFailedAt = Date.now();
-    addBubble('info', `🔈 Voce naturale non disponibile in questo momento (${err.message}): per qualche minuto uso la voce di Chrome.`, { transient: true });
+    addBubble('info', isNoFreeTier(err.message)
+      ? `🔈 ${NO_FREE_TIER_MSG} Intanto leggo con la voce di Chrome.`
+      : `🔈 Voce naturale non disponibile in questo momento (${err.message}): per qualche minuto uso la voce di Chrome.`, { transient: true });
     left.forEach((t) => chromeSpeaker.say(t));
   },
 });
@@ -557,7 +559,7 @@ async function connectLive(i, voice = settings.liveVoice) {
         addBubble('info', `⏳ ${model} non disponibile${reason ? ` (${reason})` : ''}: provo con ${liveQueue[i + 1]}.`, { transient: true });
         connectLive(i + 1);
       } else {
-        addBubble('error', `La chiamata si è chiusa${reason ? `: ${reason}` : ''} (codice ${code}).${everConnected ? '' : ' Nessun modello Live ha accettato la connessione.'}`);
+        addBubble('error', isNoFreeTier(reason) ? NO_FREE_TIER_MSG : `La chiamata si è chiusa${reason ? `: ${reason}` : ''} (codice ${code}).${everConnected ? '' : ' Nessun modello Live ha accettato la connessione.'}`);
         touchSession();
       }
     },
@@ -1268,15 +1270,30 @@ widget = createWidget({
 
 // ---------- Presentazione iniziale e voci ----------
 async function verifyKey(key) {
+  let lives = [];
   try {
     const all = await listAllModels(key);
-    const lives = liveCandidates(all);
+    lives = liveCandidates(all);
     settings.liveModels = lives;
     saveSettings();
-    return { ok: true, message: `Chiave valida ✓ — ${lives.length ? 'anche la voce dal vivo è disponibile' : 'la voce dal vivo non è disponibile con questa chiave'}.` };
   } catch (err) {
     return { ok: false, message: err.message || String(err) };
   }
+  // La chiave esiste: ora una vera richiesta di prova (Google può bloccarne l'uso anche se la chiave è valida).
+  try {
+    await complete({
+      key,
+      model: 'gemini-flash-lite-latest',
+      system: 'Rispondi solo: ok',
+      contents: [{ role: 'user', parts: [{ text: 'ok?' }] }],
+      timeoutMs: 15000,
+    });
+  } catch (err) {
+    if (err.noFreeTier || isNoFreeTier(err.message)) return { ok: false, message: NO_FREE_TIER_MSG };
+    if (err.status === 429) return { ok: true, message: 'Chiave valida ✓ — però in questo momento la quota gratuita è finita: riprova tra poco.' };
+    return { ok: true, message: `Chiave valida ✓ — i server di Google rispondono lenti in questo momento (${err.message}).` };
+  }
+  return { ok: true, message: `Chiave valida e funzionante ✓ — ${lives.length ? 'anche la voce dal vivo è disponibile' : 'la voce dal vivo non è disponibile con questa chiave'}.` };
 }
 
 /** Ordina i modelli Live per una voce: prima quello con cui è già stata sentita, poi i «native audio» (che hanno tutte le 30 voci). */
@@ -1350,9 +1367,11 @@ async function playVoiceCard(voice, key) {
     await previewLiveVoice(voice, key);
     voiceState[voice] = { kind: 'ok' };
   } catch (err) {
-    voiceState[voice] = err.voiceProblem
-      ? { kind: 'ko', note: err.message }
-      : { kind: '', note: `Non riesco a farla ascoltare: ${err.message}` };
+    voiceState[voice] = isNoFreeTier(err.message)
+      ? { kind: '', note: 'La chiave non ha il piano gratuito di Google: torna al passo «Chiave» e premi «Verifica» per sapere cosa fare.' }
+      : err.voiceProblem
+        ? { kind: 'ko', note: err.message }
+        : { kind: '', note: `Non riesco a farla ascoltare: ${err.message}` };
     throw err;
   }
 }

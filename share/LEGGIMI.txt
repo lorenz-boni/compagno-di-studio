@@ -65,6 +65,14 @@ COME SI STUDIA
 - Se Gemini è lento o sovraccarico: ⚙️ Impostazioni → «Prova velocità modelli».
 
 
+SE LA CHIAVE «NON HA IL PIANO GRATUITO»
+--------------------------------------
+Se JARVIS dice che Google non concede l'uso gratuito alla chiave (in inglese: «The Gemini API free
+tier is not available for this project… set up billing»), non è colpa del computer né di JARVIS.
+Crea una chiave nuova su https://aistudio.google.com/apikey con un account Gmail PERSONALE (non
+universitario o aziendale) e in un PROGETTO NUOVO, poi incollala e premi «Verifica».
+
+
 PRIVACY
 -------
 - La chiave, le impostazioni e le conversazioni restano nel TUO browser. Non c'è nessun server

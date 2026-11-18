@@ -74,7 +74,7 @@ export class LiveSession {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
     });
     this.inCtx = new AudioContext({ sampleRate: 16000 });
-    await this.inCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611171618', import.meta.url));
+    await this.inCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611180940', import.meta.url));
     const src = this.inCtx.createMediaStreamSource(this.stream);
     this.node = new AudioWorkletNode(this.inCtx, 'pcm-capture');
     this.node.port.onmessage = (e) => this.#sendAudio(e.data);
