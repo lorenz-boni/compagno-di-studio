@@ -761,3 +761,4 @@ dialog.welcome { width: min(720px, calc(100vw - 32px)); }
 .range-ends { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--muted); margin-top: -0.2rem; }
 .btn-dock[aria-pressed="true"]#btn-pause { border-color: var(--orange); color: var(--orange); box-shadow: 0 0 0 1px rgb(255 181 71 / 0.3); }
 .btn-dock[aria-pressed="true"]#btn-pause .ic { color: var(--orange); }
+.warn-text { color: var(--orange) !important; }

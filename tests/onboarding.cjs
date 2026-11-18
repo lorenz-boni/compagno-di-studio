@@ -32,7 +32,8 @@ const serve = require('./_server.cjs');
     ws.onMessage((raw) => {
       const m = JSON.parse(raw.toString());
       if (m.setup) {
-        const v = m.setup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName;
+        const v = m.setup.generationConfig.speechConfig?.voiceConfig.prebuiltVoiceConfig.voiceName;
+        if (!v) { send({ setupComplete: {} }); return; } // prova di collegamento della «Verifica»
         previews.push(`${v}@${m.setup.model.replace('models/', '')}`);
         // il primo modello non accetta questa voce: l'app deve provare il successivo
         if (v === 'Vindemiatrix' && m.setup.model.includes('native-audio')) { ws.close({ code: 1007, reason: 'Invalid voice name for this model' }); return; }
@@ -61,7 +62,7 @@ const serve = require('./_server.cjs');
   await page.fill('#wz-key', 'AIzaTEST');
   await page.click('#wz-check');
   await page.waitForFunction(() => document.querySelector('#wz-key-status').textContent.includes('valida'));
-  ok((await page.textContent('#wz-key-status')).includes('voce dal vivo è disponibile'), `verifica chiave: ${await page.textContent('#wz-key-status')}`);
+  ok((await page.textContent('#wz-key-status')).includes('anche la voce di JARVIS si collega'), `verifica chiave: ${await page.textContent('#wz-key-status')}`);
   await page.click('#wz-next');
   // 3. Tono e voce
   ok(await page.isChecked('input[name="wz-tone"][value="confidenziale"]'), 'tono predefinito: confidenziale');

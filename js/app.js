@@ -1,18 +1,18 @@
-import { streamChat, complete, isNoFreeTier, NO_FREE_TIER_MSG, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611180940';
-import { Listener, speechSupported } from './speech.js?v=202611180940';
-import { Speaker, cleanForSpeech, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611180940';
-import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, readNoteFull, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611180940';
-import { buildSystem, TONES, rateLabel, speedInstruction, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611180940';
+import { streamChat, complete, isNoFreeTier, NO_FREE_TIER_MSG, listModels, benchmark, listAllModels, chatCandidates, liveCandidates, setFallbackModels } from './gemini.js?v=202611180944';
+import { Listener, speechSupported } from './speech.js?v=202611180944';
+import { Speaker, cleanForSpeech, splitSentences, italianVoices, pickVoice, looksLikeEcho, ttsSupported } from './tts.js?v=202611180944';
+import { vaultSupported, pickVault, ensurePermission, listNotes, readNote, readNoteFull, appendToNote, saveVaultHandle, loadVaultHandle, searchNotes, folderOverview } from './vault.js?v=202611180944';
+import { buildSystem, TONES, rateLabel, speedInstruction, FINISHED_PREFIX, START_QUIZ, START_EXPLAIN, summaryRequest, VAULT_TOOLS, LIVE_EXTRA } from './prompts.js?v=202611180944';
 
-import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611180940';
-import { LiveSession, NaturalReader, pickLiveModels, LIVE_VOICES, previewVoice, playChunks, DEFAULT_LIVE_VOICE, SAFE_LIVE_VOICE, CLASSIC_VOICES } from './live.js?v=202611180940';
-import { createWidget } from './widget.js?v=202611180940';
-import { mountVoicePicker } from './voicepicker.js?v=202611180940';
-import { createOnboarding } from './onboarding.js?v=202611180940';
-import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611180940';
-import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611180940';
-import { stripExt, isMarkdown, kindOf, extractText, fileToBase64, OCR_PROMPT, ACCEPT } from './docs.js?v=202611180940';
-import { dbGet, dbPut } from './db.js?v=202611180940';
+import { newSession, hasContent, listSessions, saveSession, deleteSession, importFromVault, subjectOf } from './sessions.js?v=202611180944';
+import { LiveSession, NaturalReader, testLive, pickLiveModels, LIVE_VOICES, previewVoice, playChunks, DEFAULT_LIVE_VOICE, SAFE_LIVE_VOICE, CLASSIC_VOICES } from './live.js?v=202611180944';
+import { createWidget } from './widget.js?v=202611180944';
+import { mountVoicePicker } from './voicepicker.js?v=202611180944';
+import { createOnboarding } from './onboarding.js?v=202611180944';
+import { initUi, setCoreState, setConnection, setLevelProvider, renderContext, MicMeter, renderStudy } from './ui.js?v=202611180944';
+import { emptyStudy, mergeStudy, annotate, priorFromSessions, memoryText } from './study.js?v=202611180944';
+import { stripExt, isMarkdown, kindOf, extractText, fileToBase64, OCR_PROMPT, ACCEPT } from './docs.js?v=202611180944';
+import { dbGet, dbPut } from './db.js?v=202611180944';
 
 const $ = (s) => document.querySelector(s);
 
@@ -42,6 +42,13 @@ let settings = { ...DEFAULTS };
 try {
   settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('compagno.settings') || '{}') };
 } catch { /* storage non disponibile */ }
+for (const v of Object.values(settings.voiceSupport || {})) if (v) v.ko = [];
+
+const CONNECTION_MSG = 'Non riesco a collegarmi alla voce di Google: la connessione viene interrotta prima di iniziare. '
+  + 'Di solito dipende dal browser o dalla rete: usa Google Chrome (non Safari), disattiva VPN, antivirus con protezione web '
+  + 'ed estensioni che bloccano contenuti, oppure prova un\'altra rete (es. l\'hotspot del telefono). Le risposte scritte invece funzionano.';
+const isConnectionIssue = (err) => Boolean(err?.connection) || /codice 1006|code 1006/.test(String(err?.message || err || ''));
+
 function saveSettings() {
   try { localStorage.setItem('compagno.settings', JSON.stringify(settings)); } catch { /* ignora */ }
 }
@@ -116,6 +123,8 @@ const reader = new NaturalReader({
     naturalFailedAt = Date.now();
     addBubble('info', isNoFreeTier(err.message)
       ? `🔈 ${NO_FREE_TIER_MSG} Intanto leggo con la voce di Chrome.`
+      : /codice 100[56]/.test(err.message)
+        ? `🔈 ${CONNECTION_MSG} Intanto leggo con la voce di Chrome.`
       : `🔈 Voce naturale non disponibile in questo momento (${err.message}): per qualche minuto uso la voce di Chrome.`, { transient: true });
     left.forEach((t) => chromeSpeaker.say(t));
   },
@@ -559,7 +568,7 @@ async function connectLive(i, voice = settings.liveVoice) {
         addBubble('info', `⏳ ${model} non disponibile${reason ? ` (${reason})` : ''}: provo con ${liveQueue[i + 1]}.`, { transient: true });
         connectLive(i + 1);
       } else {
-        addBubble('error', isNoFreeTier(reason) ? NO_FREE_TIER_MSG : `La chiamata si è chiusa${reason ? `: ${reason}` : ''} (codice ${code}).${everConnected ? '' : ' Nessun modello Live ha accettato la connessione.'}`);
+        addBubble('error', isNoFreeTier(reason) ? NO_FREE_TIER_MSG : (!reason && !everConnected) ? CONNECTION_MSG : `La chiamata si è chiusa${reason ? `: ${reason}` : ''} (codice ${code}).${everConnected ? '' : ' Nessun modello Live ha accettato la connessione.'}`);
         touchSession();
       }
     },
@@ -1293,7 +1302,13 @@ async function verifyKey(key) {
     if (err.status === 429) return { ok: true, message: 'Chiave valida ✓ — però in questo momento la quota gratuita è finita: riprova tra poco.' };
     return { ok: true, message: `Chiave valida ✓ — i server di Google rispondono lenti in questo momento (${err.message}).` };
   }
-  return { ok: true, message: `Chiave valida e funzionante ✓ — ${lives.length ? 'anche la voce dal vivo è disponibile' : 'la voce dal vivo non è disponibile con questa chiave'}.` };
+  if (!lives.length) return { ok: true, message: 'Chiave valida e funzionante ✓ — la voce dal vivo però non è disponibile con questa chiave.' };
+  // Prova anche il collegamento al servizio vocale (usa un'altra via, che reti e browser a volte bloccano)
+  const t = await testLive(key, pickLiveModels(lives, settings.liveModel)[0]);
+  if (t.ok) return { ok: true, message: 'Chiave valida e funzionante ✓ — anche la voce di JARVIS si collega.' };
+  if (isNoFreeTier(t.reason)) return { ok: false, message: NO_FREE_TIER_MSG };
+  if (!t.reason) return { ok: true, warn: true, message: `Chiave valida ✓ — ma la voce non riesce a collegarsi (codice ${t.code || '—'}). ${CONNECTION_MSG}` };
+  return { ok: true, warn: true, message: `Chiave valida ✓ — ma la voce dal vivo risponde: «${t.reason}».` };
 }
 
 /** Ordina i modelli Live per una voce: prima quello con cui è già stata sentita, poi i «native audio» (che hanno tutte le 30 voci). */
@@ -1343,7 +1358,7 @@ async function previewLiveVoice(voice, key = settings.key) {
       return { model };
     } catch (err) {
       last = err;
-      if (!err.voiceProblem) throw err; // quota, chiave, rete: inutile provare altri modelli
+      if (!err.voiceProblem) throw err; // quota, chiave, rete: inutile provare altri modelli (e non è colpa della voce)
       if (!sup.ko.includes(model)) sup.ko.push(model);
       saveSettings();
     }
@@ -1369,6 +1384,8 @@ async function playVoiceCard(voice, key) {
   } catch (err) {
     voiceState[voice] = isNoFreeTier(err.message)
       ? { kind: '', note: 'La chiave non ha il piano gratuito di Google: torna al passo «Chiave» e premi «Verifica» per sapere cosa fare.' }
+      : isConnectionIssue(err)
+        ? { kind: '', note: CONNECTION_MSG }
       : err.voiceProblem
         ? { kind: 'ko', note: err.message }
         : { kind: '', note: `Non riesco a farla ascoltare: ${err.message}` };
@@ -1657,6 +1674,10 @@ function init() {
 
   $('#btn-welcome').onclick = () => { $('#dlg-settings').close(); onboarding.open(); };
 
+  const ua = navigator.userAgent;
+  if (!/Chrome\//.test(ua) || /Edg\//.test(ua)) {
+    addBubble('error', 'JARVIS è pensato per Google Chrome: con questo browser microfono, voce e cartella degli appunti potrebbero non funzionare. Aprilo con Chrome.');
+  }
   if (!settings.onboarded) {
     onboarding.open();
   } else if (!settings.key) {

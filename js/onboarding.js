@@ -86,7 +86,7 @@ export function createOnboarding(deps) {
     st.textContent = 'Verifico…';
     const r = await deps.verifyKey(key);
     st.textContent = r.message;
-    st.className = `hint ${r.ok ? 'ok-text' : 'err-text'}`;
+    st.className = `hint ${!r.ok ? 'err-text' : r.warn ? 'warn-text' : 'ok-text'}`;
     if (r.ok) deps.save({ key });
   };
 

@@ -74,7 +74,7 @@ export class LiveSession {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
     });
     this.inCtx = new AudioContext({ sampleRate: 16000 });
-    await this.inCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611180940', import.meta.url));
+    await this.inCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611180944', import.meta.url));
     const src = this.inCtx.createMediaStreamSource(this.stream);
     this.node = new AudioWorkletNode(this.inCtx, 'pcm-capture');
     this.node.port.onmessage = (e) => this.#sendAudio(e.data);
@@ -357,10 +357,16 @@ export function previewVoice({ key, model, voice, text, timeoutMs = 20000 }) {
     ws.onclose = (e) => {
       if (done) return;
       if (chunks.length) { finish(null); return; }
-      const reason = e.reason || `connessione chiusa (codice ${e.code})`;
-      // Quota o chiave: non è colpa della voce
-      const notVoice = /quota|exceeded|api key|permission|billing|rate/i.test(reason);
-      finish(fail(reason, !notVoice));
+      // Chiusura senza motivo (es. codice 1006): la connessione non è proprio partita → problema di rete/browser,
+      // non della voce. Google, quando rifiuta una voce o una chiave, scrive sempre il motivo.
+      if (!e.reason) {
+        const err = fail(`connessione interrotta (codice ${e.code})`, false);
+        err.connection = true;
+        finish(err);
+        return;
+      }
+      const notVoice = /quota|exceeded|api key|permission|billing|rate/i.test(e.reason);
+      finish(fail(e.reason, !notVoice));
     };
   });
 }
@@ -560,4 +566,23 @@ export class NaturalReader {
     this.inFlight = false;
     try { ws?.close(1000); } catch { /* già chiusa */ }
   }
+}
+
+/** Prova di collegamento al servizio vocale (senza voce né microfono): { ok, code, reason }. */
+export function testLive(key, model, timeoutMs = 12000) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const end = (r) => { if (settled) return; settled = true; clearTimeout(t); try { ws.close(1000); } catch { /* chiusa */ } resolve(r); };
+    const ws = new WebSocket(`${WS_URL}?key=${encodeURIComponent(key)}`);
+    const t = setTimeout(() => end({ ok: false, code: 0, reason: 'nessuna risposta entro il tempo massimo' }), timeoutMs);
+    ws.binaryType = 'arraybuffer';
+    ws.onopen = () => ws.send(JSON.stringify({ setup: { model: `models/${model}`, generationConfig: { responseModalities: ['AUDIO'] } } }));
+    ws.onmessage = (e) => {
+      try {
+        const m = JSON.parse(typeof e.data === 'string' ? e.data : new TextDecoder().decode(e.data));
+        if (m.setupComplete) end({ ok: true });
+      } catch { /* ignora */ }
+    };
+    ws.onclose = (e) => end({ ok: false, code: e.code, reason: e.reason || '' });
+  });
 }
